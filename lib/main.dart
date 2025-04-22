@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:workmanagement/screens/home/home_screen.dart';
 
 void main() {
   runApp(MyApp());
@@ -10,10 +11,10 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(title: Text("Flutter App")),
-        body: Center(child: Text("Hello, Flutter!")),
-      ),
+      title: 'TaskFlow App',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: HomePage(),
     );
   }
 }
