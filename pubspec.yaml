@@ -10,7 +10,10 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  shared_preferences: ^2.2.2  
+  shared_preferences: ^2.2.2
+  firebase_core: ^2.7.0 # Thêm Firebase Core
+  firebase_analytics: ^10.0.0 # Thêm Firebase Analytics
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

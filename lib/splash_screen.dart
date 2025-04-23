@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'auth_screen.dart';
-import 'home_screen.dart';
+import 'auth_screen.dart'; // Import màn hình đăng nhập
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -14,21 +12,18 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus();
+    _goToAuthScreen(); // Chuyển đến màn hình AuthScreen sau khi SplashScreen hiển thị
   }
 
-  Future<void> _checkLoginStatus() async {
-    await Future.delayed(const Duration(seconds: 3));
+  Future<void> _goToAuthScreen() async {
+    await Future.delayed(const Duration(seconds: 3)); // Đợi 3 giây
 
-    final prefs = await SharedPreferences.getInstance();
-    bool isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-
-    if (!mounted) return; // ✅ đảm bảo context còn tồn tại
+    if (!mounted) return; // ✅ Đảm bảo context còn tồn tại
 
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (_) => isLoggedIn ? const HomeScreen() : const AuthScreen(),
+        builder: (_) => const AuthScreen(), // Chuyển tới màn hình AuthScreen
       ),
     );
   }
