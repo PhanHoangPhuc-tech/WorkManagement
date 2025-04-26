@@ -1,3 +1,5 @@
+// Nội dung file lib/screens/tabs/calendar_screen.dart gốc của bạn
+// Ví dụ:
 import 'package:flutter/material.dart';
 
 class CalendarScreen extends StatelessWidget {
@@ -5,14 +7,9 @@ class CalendarScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      // appBar: AppBar(title: Text('Lịch')), // AppBar chung đã có ở HomePage
-      body: Center(
-        child: Text(
-          'Màn hình Lịch (Chưa cài đặt)',
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
-      ),
+    return const Scaffold(
+      // appBar: AppBar(title: Text('Lịch')), // AppBar đã có ở HomePage
+      body: Center(child: Text('Màn hình Lịch (Chưa cài đặt)')),
     );
   }
 }

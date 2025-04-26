@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-// import 'package:file_picker/file_picker.dart';
+import 'package:provider/provider.dart';
+import 'package:workmanagement/viewmodels/category_viewmodel.dart';
+import 'package:workmanagement/viewmodels/task_viewmodel.dart';
 import 'package:workmanagement/models/task_model.dart';
 
 class CreateTaskScreen extends StatefulWidget {
-  final List<String> availableCategories;
-
-  const CreateTaskScreen({super.key, required this.availableCategories});
-
+  const CreateTaskScreen({super.key});
   @override
   State<CreateTaskScreen> createState() => _CreateTaskScreenState();
 }
@@ -17,7 +16,6 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _subtaskTitleController = TextEditingController();
-
   Priority _selectedPriority = Priority.medium;
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
@@ -26,7 +24,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   String? _selectedCategory;
   IconData? _selectedSticker;
   final List<String> _attachmentNames = [];
-
+  bool _isSaving = false;
   final List<IconData> _stickerOptions = [
     Icons.star_border,
     Icons.favorite_border,
@@ -40,6 +38,10 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
     Icons.fitness_center_outlined,
     Icons.music_note_outlined,
     Icons.code_outlined,
+    Icons.attach_money_outlined,
+    Icons.airplane_ticket_outlined,
+    Icons.restaurant_outlined,
+    Icons.directions_car_outlined,
   ];
 
   @override
@@ -47,44 +49,40 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
     _titleController.dispose();
     _descriptionController.dispose();
     _subtaskTitleController.dispose();
-    for (var controller in _subtaskControllers) {
-      controller.dispose();
+    for (var c in _subtaskControllers) {
+      c.dispose();
     }
     super.dispose();
   }
 
   Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
+    final p = await showDatePicker(
       context: context,
       initialDate: _selectedDate ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2101),
     );
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
+    if (p != null) {
+      setState(() => _selectedDate = p);
     }
   }
 
   Future<void> _selectTime(BuildContext context) async {
-    final TimeOfDay? picked = await showTimePicker(
+    final p = await showTimePicker(
       context: context,
       initialTime: _selectedTime ?? TimeOfDay.now(),
     );
-    if (picked != null && picked != _selectedTime) {
-      setState(() {
-        _selectedTime = picked;
-      });
+    if (p != null) {
+      setState(() => _selectedTime = p);
     }
   }
 
   void _addSubtask() {
     if (_subtaskTitleController.text.isNotEmpty) {
-      final newTitle = _subtaskTitleController.text;
+      final t = _subtaskTitleController.text;
       setState(() {
-        _subtasks.add(Subtask(title: newTitle));
-        _subtaskControllers.add(TextEditingController(text: newTitle));
+        _subtasks.add(Subtask(title: t));
+        _subtaskControllers.add(TextEditingController(text: t));
         _subtaskTitleController.clear();
       });
       FocusScope.of(context).unfocus();
@@ -103,7 +101,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
     showDialog(
       context: context,
       builder:
-          (context) => AlertDialog(
+          (ctx) => AlertDialog(
             title: const Text('Chọn Sticker'),
             content: SizedBox(
               width: double.maxFinite,
@@ -115,14 +113,12 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                   mainAxisSpacing: 10,
                 ),
                 itemCount: _stickerOptions.length,
-                itemBuilder: (context, index) {
-                  final icon = _stickerOptions[index];
+                itemBuilder: (ctx, idx) {
+                  final icon = _stickerOptions[idx];
                   return InkWell(
                     onTap: () {
-                      setState(() {
-                        _selectedSticker = icon;
-                      });
-                      Navigator.pop(context);
+                      setState(() => _selectedSticker = icon);
+                      Navigator.pop(ctx);
                     },
                     child: Container(
                       decoration: BoxDecoration(
@@ -132,7 +128,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                       child: Icon(
                         icon,
                         size: 30,
-                        color: Theme.of(context).primaryColor,
+                        color: Theme.of(ctx).primaryColor,
                       ),
                     ),
                   );
@@ -141,16 +137,14 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(ctx),
                 child: const Text('Hủy'),
               ),
               if (_selectedSticker != null)
                 TextButton(
                   onPressed: () {
-                    setState(() {
-                      _selectedSticker = null;
-                    });
-                    Navigator.pop(context);
+                    setState(() => _selectedSticker = null);
+                    Navigator.pop(ctx);
                   },
                   child: const Text(
                     'Xóa Sticker',
@@ -164,26 +158,33 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
 
   Future<void> _pickFiles() async {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Chức năng đính kèm tệp chưa được cài đặt.'),
-      ),
+      const SnackBar(content: Text('Chức năng đính kèm chưa cài đặt.')),
     );
   }
 
   void _removeAttachment(int index) {
-    setState(() {
-      _attachmentNames.removeAt(index);
-    });
+    setState(() => _attachmentNames.removeAt(index));
   }
 
-  void _saveTask() {
-    if (_formKey.currentState!.validate()) {
-      for (int i = 0; i < _subtasks.length; i++) {
-        _subtasks[i].title = _subtaskControllers[i].text;
+  Future<void> _saveTask() async {
+    if (_formKey.currentState?.validate() ?? false) {
+      if (_isSaving) {
+        return;
       }
+      setState(() {
+        _isSaving = true;
+      });
+      final taskViewModel = context.read<TaskViewModel>();
+
+      // --- Sửa LỖI 1 (Line 171): Thêm dấu ngoặc nhọn cho vòng lặp for ---
+      for (int i = 0; i < _subtasks.length; i++) {
+        _subtasks[i].title = _subtaskControllers[i].text.trim();
+      }
+      _subtasks.removeWhere((st) => st.title.isEmpty);
+
       final newTask = Task(
-        title: _titleController.text,
-        description: _descriptionController.text,
+        title: _titleController.text.trim(),
+        description: _descriptionController.text.trim(),
         priority: _selectedPriority,
         dueDate: _selectedDate,
         dueTime: _selectedTime,
@@ -193,27 +194,66 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
         attachments:
             _attachmentNames.isNotEmpty ? List.from(_attachmentNames) : null,
       );
-      Navigator.pop(context, newTask);
+      try {
+        await taskViewModel.addTask(newTask);
+        // --- Sửa LỖI 2 (Line 195): Thêm dấu ngoặc nhọn cho if ---
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Đã thêm "${newTask.title}"')));
+        }
+      } catch (e) {
+        // --- Thêm dấu ngoặc nhọn cho nhất quán ---
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Lỗi: ${e.toString().replaceFirst('Exception: ', '')}',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } finally {
+        // --- Thêm dấu ngoặc nhọn cho nhất quán ---
+        if (mounted) {
+          setState(() {
+            _isSaving = false;
+          });
+        }
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final localizations = MaterialLocalizations.of(context);
+    final availableCategories = context.watch<CategoryViewModel>().categories;
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF005AE0),
         leading: IconButton(
           icon: const Icon(Icons.close, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
         ),
         title: const Text('Tạo Công Việc'),
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.check, color: Colors.white),
-            onPressed: _saveTask,
+            icon:
+                _isSaving
+                    ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                    : const Icon(Icons.check, color: Colors.white),
+            onPressed: _isSaving ? null : _saveTask,
             tooltip: 'Lưu công việc',
           ),
         ],
@@ -226,7 +266,6 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   if (_selectedSticker != null)
                     Padding(
@@ -236,19 +275,20 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                         size: 30,
                         color: Theme.of(context).primaryColor,
                       ),
-                    ),
+                    )
+                  else
+                    const SizedBox.shrink(),
                   Expanded(
                     child: TextFormField(
                       controller: _titleController,
                       decoration: const InputDecoration(
                         labelText: 'Tiêu đề công việc...',
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Vui lòng nhập tiêu đề';
-                        }
-                        return null;
-                      },
+                      validator:
+                          (v) =>
+                              (v == null || v.isEmpty)
+                                  ? 'Vui lòng nhập tiêu đề'
+                                  : null,
                     ),
                   ),
                   IconButton(
@@ -277,38 +317,40 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children:
-                    Priority.values.map((priority) {
-                      bool isSelected = _selectedPriority == priority;
-                      return ChoiceChip(
-                        label: Text(priority.priorityText),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          if (selected) {
-                            setState(() {
-                              _selectedPriority = priority;
-                            });
-                          }
-                        },
-                        selectedColor: priority.priorityColor.withAlpha(204),
-                        avatar: Icon(
-                          Icons.flag,
-                          size: 16,
-                          color:
-                              isSelected
-                                  ? Colors.white
-                                  : priority.priorityColor,
-                        ),
-                        labelStyle: TextStyle(
-                          color: isSelected ? Colors.white : Colors.black87,
-                        ),
-                        showCheckmark: false,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        visualDensity: VisualDensity.compact,
-                      );
-                    }).toList(),
+                    Priority.values
+                        .map(
+                          (p) => ChoiceChip(
+                            label: Text(p.priorityText),
+                            selected: _selectedPriority == p,
+                            onSelected: (s) {
+                              if (s) {
+                                setState(() => _selectedPriority = p);
+                              }
+                            },
+                            selectedColor: p.priorityColor.withAlpha(204),
+                            avatar: Icon(
+                              Icons.flag,
+                              size: 16,
+                              color:
+                                  _selectedPriority == p
+                                      ? Colors.white
+                                      : p.priorityColor,
+                            ),
+                            labelStyle: TextStyle(
+                              color:
+                                  _selectedPriority == p
+                                      ? Colors.white
+                                      : Colors.black87,
+                            ),
+                            showCheckmark: false,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        )
+                        .toList(),
               ),
               const SizedBox(height: 24),
               DropdownButtonFormField<String>(
@@ -319,17 +361,15 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                   prefixIcon: Icon(Icons.label_outline),
                 ),
                 items:
-                    widget.availableCategories.map((String category) {
-                      return DropdownMenuItem<String>(
-                        value: category,
-                        child: Text(category),
-                      );
-                    }).toList(),
-                onChanged: (String? newValue) {
-                  setState(() {
-                    _selectedCategory = newValue;
-                  });
-                },
+                    availableCategories
+                        .map(
+                          (cat) => DropdownMenuItem<String>(
+                            value: cat,
+                            child: Text(cat),
+                          ),
+                        )
+                        .toList(),
+                onChanged: (v) => setState(() => _selectedCategory = v),
               ),
               const SizedBox(height: 24),
               const Text(
@@ -353,11 +393,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               : DateFormat('dd/MM/yyyy').format(_selectedDate!),
                           style: TextStyle(
                             color:
-                                _selectedDate == null
-                                    ? Colors.grey[600]
-                                    : Theme.of(
-                                      context,
-                                    ).textTheme.bodyLarge?.color,
+                                _selectedDate == null ? Colors.grey[600] : null,
                           ),
                         ),
                       ),
@@ -381,11 +417,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               ),
                           style: TextStyle(
                             color:
-                                _selectedTime == null
-                                    ? Colors.grey[600]
-                                    : Theme.of(
-                                      context,
-                                    ).textTheme.bodyLarge?.color,
+                                _selectedTime == null ? Colors.grey[600] : null,
                           ),
                         ),
                       ),
@@ -403,18 +435,15 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _subtasks.length,
-                itemBuilder: (context, index) {
-                  final subtask = _subtasks[index];
-                  final controller = _subtaskControllers[index];
+                itemBuilder: (ctx, idx) {
+                  final subtask = _subtasks[idx];
+                  final controller = _subtaskControllers[idx];
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Checkbox(
                       value: subtask.isDone,
-                      onChanged: (bool? value) {
-                        setState(() {
-                          subtask.isDone = value ?? false;
-                        });
-                      },
+                      onChanged:
+                          (v) => setState(() => subtask.isDone = v ?? false),
                       visualDensity: VisualDensity.compact,
                       activeColor: Theme.of(context).primaryColor,
                     ),
@@ -434,9 +463,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                       ),
                       style: TextStyle(
                         decoration:
-                            subtask.isDone
-                                ? TextDecoration.lineThrough
-                                : TextDecoration.none,
+                            subtask.isDone ? TextDecoration.lineThrough : null,
                         color: subtask.isDone ? Colors.grey[600] : null,
                       ),
                     ),
@@ -445,7 +472,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                         Icons.remove_circle_outline,
                         color: Colors.red.shade300,
                       ),
-                      onPressed: () => _removeSubtask(index),
+                      onPressed: () => _removeSubtask(idx),
                       splashRadius: 20,
                       tooltip: 'Xóa công việc con',
                     ),
@@ -495,20 +522,26 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                 spacing: 8.0,
                 runSpacing: 4.0,
                 children:
-                    _attachmentNames.asMap().entries.map((entry) {
-                      int idx = entry.key;
-                      String name = entry.value;
-                      return Chip(
-                        label: Text(name, style: const TextStyle(fontSize: 12)),
-                        deleteIconColor: Colors.red[400],
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        onDeleted: () => _removeAttachment(idx),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      );
-                    }).toList(),
+                    _attachmentNames
+                        .asMap()
+                        .entries
+                        .map(
+                          (entry) => Chip(
+                            label: Text(
+                              entry.value,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            deleteIconColor: Colors.red[400],
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            onDeleted: () => _removeAttachment(entry.key),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        )
+                        .toList(),
               ),
               const SizedBox(height: 8),
               OutlinedButton.icon(
