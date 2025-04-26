@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:workmanagement/viewmodels/category_viewmodel.dart';
-import 'package:workmanagement/viewmodels/task_viewmodel.dart';
-import 'package:workmanagement/models/task_model.dart';
+import 'package:workmanagement/ViewModel/category_viewmodel.dart';
+import 'package:workmanagement/ViewModel/task_viewmodel.dart';
+import 'package:workmanagement/Mo/task_model.dart';
 import 'package:workmanagement/screens/tabs/create_task.dart';
 import 'package:workmanagement/screens/tabs/edit_task.dart';
 import 'package:workmanagement/screens/tabs/manage_categories_screen.dart';
@@ -166,6 +166,15 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('TaskFlow'),
+        backgroundColor: const Color(0xFF005AE0),
+        titleTextStyle: const TextStyle(  // Đặt màu trắng cho title
+          color: Colors.white,  // Chỉnh màu chữ thành trắng
+          fontSize: 20,         // Kích thước chữ (có thể thay đổi tùy ý)
+          fontWeight: FontWeight.bold,  // Định dạng chữ đậm (tuỳ chọn)
+        ),
+        iconTheme: const IconThemeData(  
+          color: Colors.white, 
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),

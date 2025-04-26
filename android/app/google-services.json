@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "362988978831",
+    "project_id": "mobileapp-33dc4",
+    "storage_bucket": "mobileapp-33dc4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:362988978831:android:49355f5c486769eb55a6fa",
+        "android_client_info": {
+          "package_name": "com.example.workmanagement"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC_S9LbXhCO5OlWuyomecsaJTycNafvFGY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
