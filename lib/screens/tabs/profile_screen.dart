@@ -6,8 +6,8 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 // --- Đảm bảo bạn đã import đúng đường dẫn tới các file model và viewmodel ---
 import 'package:workmanagement/Mo/task_model.dart';
-import 'package:workmanagement/ViewModel/category_viewmodel.dart';
-import 'package:workmanagement/ViewModel/task_viewmodel.dart';
+import 'package:workmanagement/viewmodels/category_viewmodel.dart';
+import 'package:workmanagement/viewmodels/task_viewmodel.dart';
 // -------------------------------------------------------------------------
 
 enum TimeRange { today, thisWeek, thisMonth, thisYear, allTime, custom }

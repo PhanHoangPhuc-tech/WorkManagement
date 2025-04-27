@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:workmanagement/screens/tabs/home_page.dart'; // Màn hình chính
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+  const SplashScreen({super.key});
 
   @override
   SplashScreenState createState() => SplashScreenState();
