@@ -9,10 +9,13 @@ import 'package:workmanagement/screens/tabs/edit_task.dart';
 import 'package:workmanagement/screens/tabs/manage_categories_screen.dart';
 import 'package:workmanagement/screens/tabs/calendar_screen.dart';
 import 'package:workmanagement/screens/tabs/profile_screen.dart';
-import 'package:workmanagement/screens/tabs/settings_screen.dart';
+import 'package:workmanagement/views/settings_screen.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final String userId;
+
+  const HomePage({super.key, required this.userId});  
+
   @override
   State<HomePage> createState() => _HomePageState();
 }

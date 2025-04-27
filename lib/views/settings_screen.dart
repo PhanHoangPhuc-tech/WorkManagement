@@ -1,7 +1,8 @@
-// Nội dung file lib/screens/tabs/settings_screen.dart gốc của bạn
-// Ví dụ:
 import 'package:flutter/material.dart';
 import 'package:workmanagement/screens/tabs/manage_categories_screen.dart'; // Import để điều hướng
+import 'package:workmanagement/viewmodels/auth_view_model.dart'; // Để truy cập AuthViewModel
+import 'package:provider/provider.dart'; // Để sử dụng Provider
+import 'auth_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -9,7 +10,6 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // appBar: AppBar(title: Text('Cài đặt')), // AppBar đã có ở HomePage
       body: ListView(
         children: [
           ListTile(
@@ -58,7 +58,27 @@ class SettingsScreen extends StatelessWidget {
               );
             },
           ),
-          // Thêm các cài đặt khác nếu cần
+          const Divider(height: 1),
+          // Thêm ListTile cho chức năng đăng xuất
+          ListTile(
+            leading: const Icon(Icons.logout),
+            title: const Text('Đăng xuất'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              // Xử lý đăng xuất
+              final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
+              await authViewModel.signOut();
+
+              // Kiểm tra xem widget còn tồn tại không trước khi điều hướng
+              if (!context.mounted) return;  // Kiểm tra widget có tồn tại hay không
+
+              // Sau khi đăng xuất, chuyển hướng về màn hình đăng nhập
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const AuthScreen()),
+              );
+            },
+          ),
         ],
       ),
     );

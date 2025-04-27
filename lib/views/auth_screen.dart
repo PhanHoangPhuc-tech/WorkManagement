@@ -64,8 +64,7 @@ class AuthScreen extends StatelessWidget {
                   // Kiểm tra xem widget có còn mounted không
                   if (!context.mounted) return;
 
-                  await Provider.of<AuthViewModel>(context, listen: false)
-                      .signInWithGoogle();
+                  await Provider.of<AuthViewModel>(context, listen: false).signInWithGoogle(context);
 
                   // Sau khi hoàn thành đăng nhập, kiểm tra xem người dùng đã đăng nhập chưa
                   if (context.mounted) { // Kiểm tra lại trước khi sử dụng BuildContext
@@ -78,6 +77,7 @@ class AuthScreen extends StatelessWidget {
                     }
                   }
                 },
+
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
                   padding: EdgeInsets.symmetric(vertical: 16),

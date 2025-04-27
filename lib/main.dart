@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:workmanagement/views/auth_screen.dart'; 
+import 'package:workmanagement/views/splash_screen.dart'; 
 import 'firebase_options.dart';  
 import 'package:provider/provider.dart'; 
 import 'package:workmanagement/viewmodels/task_viewmodel.dart'; 
@@ -19,9 +19,9 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => TaskViewModel()), // Cung cấp TaskViewModel
-        ChangeNotifierProvider(create: (_) => CategoryViewModel()), // Cung cấp CategoryViewModel
-        ChangeNotifierProvider(create: (_) => AuthViewModel()), // Cung cấp AuthViewModel
+        ChangeNotifierProvider(create: (_) => TaskViewModel()), 
+        ChangeNotifierProvider(create: (_) => CategoryViewModel()), 
+        ChangeNotifierProvider(create: (_) => AuthViewModel()), 
       ],
       child: const MyApp(),
     ),
@@ -39,8 +39,8 @@ class MyApp extends StatelessWidget {
         primaryColor: const Color(0xFF005AE0),
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF005AE0)),
       ),
-      home: const AuthScreen(), // Đặt SplashScreen làm màn hình khởi động
-      debugShowCheckedModeBanner: false, // Tắt banner debug
+      home: const SplashScreen(), 
+      debugShowCheckedModeBanner: false, 
     );
   }
 }
