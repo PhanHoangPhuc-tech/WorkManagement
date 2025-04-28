@@ -5,7 +5,8 @@ import 'firebase_options.dart';
 import 'package:provider/provider.dart'; 
 import 'package:workmanagement/viewmodels/task_viewmodel.dart'; 
 import 'package:workmanagement/viewmodels/category_viewmodel.dart'; 
-import 'package:workmanagement/viewmodels/auth_view_model.dart';  // Thêm AuthViewModel
+import 'package:workmanagement/viewmodels/auth_user_view_model.dart';  
+import 'package:workmanagement/viewmodels/profile_view_model.dart';  
 
 void main() async {
   // Đảm bảo Flutter bindings được khởi tạo trước khi Firebase được khởi tạo
@@ -19,9 +20,11 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => TaskViewModel()), 
-        ChangeNotifierProvider(create: (_) => CategoryViewModel()), 
-        ChangeNotifierProvider(create: (_) => AuthViewModel()), 
+        // Đăng ký tất cả các provider cho ViewModels
+        ChangeNotifierProvider(create: (_) => TaskViewModel()),
+        ChangeNotifierProvider(create: (_) => CategoryViewModel()),
+        ChangeNotifierProvider(create: (_) => AuthViewModel()),
+        ChangeNotifierProvider(create: (_) => ProfileViewModel()), // Đảm bảo ProfileViewModel có sẵn ở đây
       ],
       child: const MyApp(),
     ),
@@ -39,8 +42,8 @@ class MyApp extends StatelessWidget {
         primaryColor: const Color(0xFF005AE0),
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF005AE0)),
       ),
-      home: const SplashScreen(), 
-      debugShowCheckedModeBanner: false, 
+      home: const SplashScreen(),  // Màn hình splash khi khởi động
+      debugShowCheckedModeBanner: false,  // Tắt banner debug
     );
   }
 }

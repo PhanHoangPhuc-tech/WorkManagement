@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:workmanagement/screens/tabs/manage_categories_screen.dart'; // Import để điều hướng
-import 'package:workmanagement/viewmodels/auth_view_model.dart'; // Để truy cập AuthViewModel
+import 'package:workmanagement/viewmodels/auth_user_view_model.dart'; // Để truy cập AuthViewModel
 import 'package:provider/provider.dart'; // Để sử dụng Provider
 import 'auth_screen.dart';
+import 'profile_screen.dart'; 
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -12,6 +13,21 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       body: ListView(
         children: [
+          // Thêm mục Hồ sơ cá nhân nằm đầu tiên
+          ListTile(
+            leading: const Icon(Icons.person_outline),
+            title: const Text('Hồ sơ cá nhân'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ProfileSettingScreen(),  // Điều hướng đến màn hình Hồ sơ cá nhân
+                ),
+              );
+            },
+          ),
+          const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.category_outlined),
             title: const Text('Quản lý phân loại'),

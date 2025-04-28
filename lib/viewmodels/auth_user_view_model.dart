@@ -1,15 +1,17 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/material.dart';
-import '../models/user_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';  // Import Firestore
+import '../models/auth_user_model.dart';  // Đảm bảo import đúng từ auth_user_model.dart
 import 'package:logger/logger.dart';
 import 'package:workmanagement/screens/tabs/home_page.dart';
 
 class AuthViewModel extends ChangeNotifier {
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;  // Firestore instance
 
-  UserModel? _user;
+  UserModel? _user;  // Sử dụng UserModel từ auth_user_model.dart
   UserModel? get user => _user;
   bool get isAuthenticated => _user != null;
 
@@ -31,7 +33,10 @@ class AuthViewModel extends ChangeNotifier {
       );
 
       final UserCredential userCredential = await _firebaseAuth.signInWithCredential(credential);
-      _user = UserModel.fromFirebaseUser(userCredential.user!);
+      _user = UserModel.fromFirebaseUser(userCredential.user!);  // Đảm bảo gọi từ đúng UserModel
+
+      // Lưu thông tin người dùng vào Firestore nếu là lần đầu đăng nhập
+      await _saveUserToFirestore(_user!);
 
       notifyListeners();  
 
@@ -62,5 +67,23 @@ class AuthViewModel extends ChangeNotifier {
     await _googleSignIn.signOut();
     _user = null;
     notifyListeners();
+  }
+
+  // Lưu thông tin người dùng vào Firestore
+  Future<void> _saveUserToFirestore(UserModel userModel) async {
+    try {
+      DocumentReference userDocRef = _firestore.collection('users').doc(userModel.uid);
+      DocumentSnapshot userDoc = await userDocRef.get();
+
+      if (!userDoc.exists) {
+        // Nếu tài liệu người dùng chưa tồn tại, tạo mới
+        await userDocRef.set(userModel.toMap());
+        logger.i('User saved to Firestore');
+      } else {
+        logger.i('User already exists in Firestore');
+      }
+    } catch (e) {
+      logger.e('Error saving user to Firestore: $e');
+    }
   }
 }
