@@ -14,6 +14,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "362988978831-0ofpms3uhtcg22tdusvu4457rcgrsm26.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.workmanagement",
+            "certificate_hash": "fecafbfaa50a965df597e0edacfd235c7d5c4df1"
+          }
+        },
+        {
+          "client_id": "362988978831-jj9p8duef6adaa22h2fptlu53stgrred.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.workmanagement",
+            "certificate_hash": "a9273f60f38e50515a777b2edea16cc5999a1f6c"
+          }
+        },
+        {
           "client_id": "362988978831-voi2t7tnkoitlm9h54n1hbmpv29hdpc9.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -29,6 +45,13 @@
             {
               "client_id": "362988978831-voi2t7tnkoitlm9h54n1hbmpv29hdpc9.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "362988978831-g8ng57gujc20t7b7tmko2pjrqisbqe7f.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.workmanagement"
+              }
             }
           ]
         }

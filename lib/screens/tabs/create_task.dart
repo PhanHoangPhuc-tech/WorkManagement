@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:workmanagement/viewmodels/category_viewmodel.dart';
 import 'package:workmanagement/viewmodels/task_viewmodel.dart';
-import 'package:workmanagement/Mo/task_model.dart';
+import 'package:workmanagement/models/task_model.dart';
 
 class CreateTaskScreen extends StatefulWidget {
   const CreateTaskScreen({super.key});

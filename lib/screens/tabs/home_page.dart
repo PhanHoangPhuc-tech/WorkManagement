@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:workmanagement/viewmodels/category_viewmodel.dart';
 import 'package:workmanagement/viewmodels/task_viewmodel.dart';
-import 'package:workmanagement/Mo/task_model.dart';
+import 'package:workmanagement/models/task_model.dart';
 import 'package:workmanagement/screens/tabs/create_task.dart';
 import 'package:workmanagement/screens/tabs/edit_task.dart';
 import 'package:workmanagement/screens/tabs/manage_categories_screen.dart';
@@ -14,7 +14,7 @@ import 'package:workmanagement/views/settings_screen.dart';
 class HomePage extends StatefulWidget {
   final String userId;
 
-  const HomePage({super.key, required this.userId});  
+  const HomePage({super.key, required this.userId});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -170,14 +170,13 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('TaskFlow'),
         backgroundColor: const Color(0xFF005AE0),
-        titleTextStyle: const TextStyle(  // Đặt màu trắng cho title
-          color: Colors.white,  // Chỉnh màu chữ thành trắng
-          fontSize: 20,         // Kích thước chữ (có thể thay đổi tùy ý)
-          fontWeight: FontWeight.bold,  // Định dạng chữ đậm (tuỳ chọn)
+        titleTextStyle: const TextStyle(
+          // Đặt màu trắng cho title
+          color: Colors.white, // Chỉnh màu chữ thành trắng
+          fontSize: 20, // Kích thước chữ (có thể thay đổi tùy ý)
+          fontWeight: FontWeight.bold, // Định dạng chữ đậm (tuỳ chọn)
         ),
-        iconTheme: const IconThemeData(  
-          color: Colors.white, 
-        ),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
