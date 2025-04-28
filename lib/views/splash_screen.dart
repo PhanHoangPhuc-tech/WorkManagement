@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';  // Để dùng authStateChanges
-import 'package:workmanagement/screens/tabs/home_page.dart';  // Màn hình chính
+import 'package:firebase_auth/firebase_auth.dart'; // Để dùng authStateChanges
+import 'package:workmanagement/views/home_page.dart'; // Màn hình chính
 import 'package:workmanagement/views/auth_screen.dart'; // Màn hình đăng nhập
 
 class SplashScreen extends StatefulWidget {
@@ -19,14 +19,12 @@ class SplashScreenState extends State<SplashScreen> {
     Future.delayed(const Duration(seconds: 2), () {
       // Lắng nghe trạng thái đăng nhập của người dùng sau khi 2 giây
       FirebaseAuth.instance.authStateChanges().listen((User? user) {
-        if (!mounted) return;  // Kiểm tra xem widget có còn tồn tại không
+        if (!mounted) return; // Kiểm tra xem widget có còn tồn tại không
         if (user != null) {
           // Nếu người dùng đã đăng nhập, chuyển đến màn hình chính (HomePage)
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-              builder: (context) => HomePage(userId: user.uid),
-            ),
+            MaterialPageRoute(builder: (context) => HomePage(userId: user.uid)),
           );
         } else {
           // Nếu người dùng chưa đăng nhập, chuyển đến màn hình đăng nhập (AuthScreen)

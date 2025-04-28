@@ -1,23 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
+import 'package:collection/collection.dart';
 import 'package:workmanagement/models/task_model.dart';
-import 'package:workmanagement/repositories/task_repository.dart';
+import 'package:workmanagement/repositories/itask_repository.dart';
+import 'package:workmanagement/viewmodels/task_view_data.dart';
 
 class TaskViewModel with ChangeNotifier {
-  final ITaskRepository _repository = TaskRepository();
+  final ITaskRepository _repository;
+  final _uuid = const Uuid();
   List<Task> _tasks = [];
   bool _isLoading = false;
   String? _error;
   String? _selectedCategoryFilter;
   bool _showCompleted = true;
 
-  List<Task> get tasks => _tasks;
+  TaskViewModel(this._repository) {
+    loadTasks();
+  }
+
   bool get isLoading => _isLoading;
   String? get error => _error;
   String? get selectedCategoryFilter => _selectedCategoryFilter;
   bool get showCompleted => _showCompleted;
+  List<Task> get allRawTasks => UnmodifiableListView(_tasks);
 
-  List<Task> get filteredAndSortedTasks {
-    List<Task> filtered = _tasks;
+  List<Task> get _filteredAndSortedTasks {
+    List<Task> filtered = List.from(_tasks);
 
     if (_selectedCategoryFilter != null) {
       filtered =
@@ -32,10 +41,9 @@ class TaskViewModel with ChangeNotifier {
     final todayStart = DateTime(now.year, now.month, now.day);
 
     filtered.sort((a, b) {
-      bool aIsDone = a.isDone;
-      bool bIsDone = b.isDone;
-
       if (showCompleted) {
+        bool aIsDone = a.isDone;
+        bool bIsDone = b.isDone;
         if (aIsDone != bIsDone) {
           return aIsDone ? 1 : -1;
         }
@@ -52,13 +60,9 @@ class TaskViewModel with ChangeNotifier {
         return groupA.compareTo(groupB);
       }
 
-      if (!a.isDone && !b.isDone) {}
-
       final timeA = a.dueTime ?? const TimeOfDay(hour: 23, minute: 59);
       final timeB = b.dueTime ?? const TimeOfDay(hour: 23, minute: 59);
-      int timeComparison = (timeA.hour * 60 + timeA.minute).compareTo(
-        timeB.hour * 60 + timeB.minute,
-      );
+      int timeComparison = _compareTimeOfDay(timeA, timeB);
       if (timeComparison != 0) {
         return timeComparison;
       }
@@ -74,51 +78,51 @@ class TaskViewModel with ChangeNotifier {
   }
 
   int _getTaskGroupIndex(Task task, DateTime today) {
-    if (task.dueDate == null) {
-      return 3;
-    }
+    if (task.isDone && showCompleted) return 99;
+    if (task.dueDate == null) return 3;
     final taskDateOnly = DateTime(
       task.dueDate!.year,
       task.dueDate!.month,
       task.dueDate!.day,
     );
-    if (taskDateOnly.isBefore(today)) {
-      return 0;
-    }
-    if (taskDateOnly.isAtSameMomentAs(today)) {
-      return 1;
-    }
+    if (taskDateOnly.isBefore(today)) return 0;
+    if (taskDateOnly.isAtSameMomentAs(today)) return 1;
     return 2;
+  }
+
+  int _compareTimeOfDay(TimeOfDay a, TimeOfDay b) {
+    final timeA = a.hour * 60 + a.minute;
+    final timeB = b.hour * 60 + b.minute;
+    return timeA.compareTo(timeB);
   }
 
   int _compareTasksByTimeAndPriority(Task a, Task b) {
     final timeA = a.dueTime ?? const TimeOfDay(hour: 23, minute: 59);
     final timeB = b.dueTime ?? const TimeOfDay(hour: 23, minute: 59);
-    int timeComparison = (timeA.hour * 60 + timeA.minute).compareTo(
-      timeB.hour * 60 + timeB.minute,
-    );
-    if (timeComparison != 0) {
-      return timeComparison;
-    }
-    return a.priority.index.compareTo(b.priority.index);
+    int timeComparison = _compareTimeOfDay(timeA, timeB);
+    if (timeComparison != 0) return timeComparison;
+    return b.priority.index.compareTo(a.priority.index);
   }
 
-  Map<String, List<Task>> get groupedTasks {
+  Map<String, List<TaskViewData>> get groupedTasks {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
-    final List<Task> tasksToGroup = filteredAndSortedTasks;
-    final Map<String, List<Task>> sections = {
+    final List<Task> tasksToGroup = _filteredAndSortedTasks;
+
+    final Map<String, List<TaskViewData>> sections = {
       'Quá hạn': [],
       'Hôm nay': [],
       'Tương lai': [],
       'Chưa xác định': [],
-      'Đã hoàn thành hôm nay': [],
+      if (_showCompleted) 'Đã hoàn thành': [],
     };
 
     for (var task in tasksToGroup) {
+      final taskViewData = _createTaskViewData(task, todayStart);
+
       if (task.isDone) {
         if (_showCompleted) {
-          sections['Đã hoàn thành hôm nay']!.add(task);
+          sections['Đã hoàn thành']!.add(taskViewData);
         }
       } else if (task.dueDate != null) {
         final taskDate = DateTime(
@@ -127,165 +131,250 @@ class TaskViewModel with ChangeNotifier {
           task.dueDate!.day,
         );
         if (taskDate.isBefore(todayStart)) {
-          sections['Quá hạn']!.add(task);
+          sections['Quá hạn']!.add(taskViewData);
         } else if (taskDate.isAtSameMomentAs(todayStart)) {
-          sections['Hôm nay']!.add(task);
+          sections['Hôm nay']!.add(taskViewData);
         } else {
-          sections['Tương lai']!.add(task);
+          sections['Tương lai']!.add(taskViewData);
         }
       } else {
-        sections['Chưa xác định']!.add(task);
+        sections['Chưa xác định']!.add(taskViewData);
       }
     }
 
-    sections['Hôm nay']?.sort(_compareTasksByTimeAndPriority);
-    sections['Tương lai']?.sort((a, b) {
-      int c = a.dueDate!.compareTo(b.dueDate!);
-      return c != 0 ? c : _compareTasksByTimeAndPriority(a, b);
-    });
-    sections['Đã hoàn thành hôm nay']?.sort(
-      (a, b) => (b.completedAt ?? b.createdAt).compareTo(
-        a.completedAt ?? a.createdAt,
-      ),
+    sections['Hôm nay']?.sort(
+      (a, b) => _compareTasksByTimeAndPriority(a.originalTask, b.originalTask),
     );
+    sections['Tương lai']?.sort((a, b) {
+      int dateComparison = a.originalTask.dueDate!.compareTo(
+        b.originalTask.dueDate!,
+      );
+      if (dateComparison != 0) return dateComparison;
+      return _compareTasksByTimeAndPriority(a.originalTask, b.originalTask);
+    });
+
     sections.removeWhere((key, value) => value.isEmpty);
     return sections;
   }
 
-  TaskViewModel() {
-    loadTasks();
+  TaskViewData _createTaskViewData(Task task, DateTime todayStart) {
+    final dateFormat = DateFormat(
+      'dd/MM/yyyy',
+      'vi_VN',
+    ); // Lỗi LocaleDataException xảy ra nếu chưa initialize
+    String formattedDueDate = '';
+    String formattedDueTime = '';
+    List<String> subtitleParts = [];
+    bool isOverdue = false;
+
+    if (task.dueDate != null) {
+      formattedDueDate = dateFormat.format(task.dueDate!);
+      subtitleParts.add(formattedDueDate);
+
+      if (task.dueTime != null) {
+        formattedDueTime =
+            '${task.dueTime!.hour.toString().padLeft(2, '0')}:${task.dueTime!.minute.toString().padLeft(2, '0')}';
+      }
+    }
+
+    if (!task.isDone && task.dueDate != null) {
+      final taskDateOnly = DateTime(
+        task.dueDate!.year,
+        task.dueDate!.month,
+        task.dueDate!.day,
+      );
+      if (taskDateOnly.isBefore(todayStart)) {
+        isOverdue = true;
+      }
+    }
+
+    if (task.description.isNotEmpty) {
+      subtitleParts.add(task.description);
+    }
+    final String categoryDisplay =
+        task.category != null && task.category!.isNotEmpty
+            ? '[${task.category}]'
+            : '';
+    if (categoryDisplay.isNotEmpty) {
+      subtitleParts.add(categoryDisplay);
+    }
+    final String displaySubtitle = subtitleParts.join(' • ');
+
+    return TaskViewData(
+      id: task.id,
+      title: task.title,
+      displaySubtitle: displaySubtitle,
+      formattedDueDate: formattedDueDate,
+      formattedDueTime: formattedDueTime,
+      categoryDisplay: categoryDisplay,
+      isDone: task.isDone,
+      isOverdue: isOverdue,
+      priorityColor: task.priority.priorityColor,
+      sticker: task.sticker,
+      originalTask: task,
+    );
   }
 
   Future<void> loadTasks() async {
-    if (_isLoading) {
-      return;
-    }
-    _isLoading = true;
+    if (_isLoading) return;
+    _setLoading(true);
     _error = null;
-    notifyListeners();
     try {
       _tasks = await _repository.getAllTasks();
-    } catch (e) {
-      _error = "Lỗi tải công việc: $e";
-      _tasks = [];
+      debugPrint("Tải thành công ${_tasks.length} công việc.");
+    } catch (e, s) {
+      _setError("Lỗi tải công việc: $e", s);
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
   }
 
   Future<void> addTask(Task task) async {
     if (_isLoading) {
-      throw Exception("Đang xử lý...");
+      debugPrint("ViewModel đang bận, bỏ qua addTask");
+      return;
     }
-    _isLoading = true;
+    _setLoading(true);
     _error = null;
-    notifyListeners();
     try {
-      final taskToAdd =
-          task.id.isEmpty
-              ? task.copyWith(
-                id: DateTime.now().millisecondsSinceEpoch.toString(),
-              )
-              : task;
+      final taskToAdd = task.id.isEmpty ? task.copyWith(id: _uuid.v4()) : task;
       final addedTask = await _repository.addTask(taskToAdd);
       _tasks.insert(0, addedTask);
-      _isLoading = false;
-      notifyListeners();
-    } catch (e) {
-      _error = "Lỗi thêm: $e";
-      _isLoading = false;
-      notifyListeners();
-      rethrow;
+      debugPrint("Thêm thành công task: ${addedTask.title}");
+    } catch (e, s) {
+      _setError("Lỗi thêm công việc: $e", s);
+    } finally {
+      _setLoading(false);
     }
   }
 
   Future<void> updateTask(Task task) async {
     if (_isLoading) {
-      throw Exception("Đang xử lý...");
+      debugPrint("ViewModel đang bận, bỏ qua updateTask");
+      return;
     }
-    _isLoading = true;
     _error = null;
+
+    Task? originalTask;
+    final index = _tasks.indexWhere((t) => t.id == task.id);
+
+    if (index == -1) {
+      _setError("Lỗi: Không tìm thấy task để cập nhật.", null);
+      return;
+    }
+
+    originalTask = _tasks[index];
+
+    _tasks[index] = task;
     notifyListeners();
+
     try {
       await _repository.updateTask(task);
-      final index = _tasks.indexWhere((t) => t.id == task.id);
-      if (index != -1) {
-        _tasks[index] = task;
-      } else {
-        _tasks.insert(0, task);
-      }
-      _isLoading = false;
+      debugPrint("Cập nhật thành công task: ${task.title}");
+    } catch (e, s) {
+      // --- SỬA LỖI Ở ĐÂY: Xóa dấu ! ---
+      _tasks[index] = originalTask;
+      // -----------------------------
+      _setError("Lỗi cập nhật công việc: $e", s);
       notifyListeners();
-    } catch (e) {
-      _error = "Lỗi cập nhật: $e";
-      _isLoading = false;
-      notifyListeners();
-      rethrow;
     }
   }
 
   Future<void> deleteTask(String taskId) async {
     if (_isLoading) {
-      throw Exception("Đang xử lý...");
+      debugPrint("ViewModel đang bận, bỏ qua deleteTask");
+      return;
     }
-    _isLoading = true;
-    _error = null;
+    final index = _tasks.indexWhere((t) => t.id == taskId);
+    if (index == -1) {
+      _setError("Lỗi: Không tìm thấy task để xóa.", null);
+      return;
+    }
+
+    final taskToDelete = _tasks[index];
+    _tasks.removeAt(index);
     notifyListeners();
+
     try {
       await _repository.deleteTask(taskId);
-      _tasks.removeWhere((t) => t.id == taskId);
-      _isLoading = false;
+      debugPrint("Xóa thành công task ID: $taskId");
+    } catch (e, s) {
+      _tasks.insert(index, taskToDelete);
+      _setError("Lỗi xóa công việc: $e", s);
       notifyListeners();
-    } catch (e) {
-      _error = "Lỗi xóa: $e";
-      _isLoading = false;
-      notifyListeners();
-      rethrow;
     }
   }
 
   Future<void> toggleTaskDone(String taskId) async {
     final index = _tasks.indexWhere((t) => t.id == taskId);
     if (index != -1) {
-      final task = _tasks[index];
-      final updatedTask = task.copyWith(isDone: !task.isDone);
+      final originalTask = _tasks[index];
+      final updatedTask = originalTask.copyWith(isDone: !originalTask.isDone);
+
       _tasks[index] = updatedTask;
       notifyListeners();
-      _repository.updateTask(updatedTask).catchError((e) {
-        _tasks[index] = task;
-        _error = "Lỗi lưu";
+
+      try {
+        await _repository.updateTask(updatedTask);
+        debugPrint("Toggle thành công task: ${updatedTask.title}");
+      } catch (e, s) {
+        _tasks[index] = originalTask;
+        _setError("Lỗi cập nhật trạng thái: $e", s);
         notifyListeners();
-      });
+      }
+    } else {
+      _setError("Lỗi: Không tìm thấy task để toggle.", null);
     }
   }
 
   Future<void> handleCategoryDeleted(String deletedCategoryName) async {
+    if (_isLoading) {
+      debugPrint("ViewModel đang bận, bỏ qua handleCategoryDeleted");
+      return;
+    }
     _error = null;
+    List<Task> originalTasksState = List.from(_tasks);
+    String? originalFilter = _selectedCategoryFilter;
+    bool stateChanged = false;
+
+    List<Task> tasksToUpdateApi = [];
+    for (int i = 0; i < _tasks.length; i++) {
+      if (_tasks[i].category == deletedCategoryName) {
+        final updatedTask = _tasks[i].copyWith(setCategoryNull: true);
+        _tasks[i] = updatedTask;
+        tasksToUpdateApi.add(updatedTask);
+        stateChanged = true;
+      }
+    }
+    if (_selectedCategoryFilter == deletedCategoryName) {
+      _selectedCategoryFilter = null;
+      stateChanged = true;
+    }
+
+    if (stateChanged) {
+      notifyListeners();
+    }
+
     try {
-      await _repository.updateTasksCategory(deletedCategoryName, null);
-      bool changed = false;
-      for (int i = 0; i < _tasks.length; i++) {
-        if (_tasks[i].category == deletedCategoryName) {
-          _tasks[i] = _tasks[i].copyWith(setCategoryNull: true);
-          changed = true;
-        }
+      if (tasksToUpdateApi.isNotEmpty) {
+        await _repository.updateTasksCategory(deletedCategoryName, null);
+        debugPrint(
+          "API: Cập nhật category null cho '$deletedCategoryName' thành công.",
+        );
       }
-      if (_selectedCategoryFilter == deletedCategoryName) {
-        _selectedCategoryFilter = null;
-        changed = true;
-      }
-      if (changed) {
-        notifyListeners();
-      }
-    } catch (e) {
-      _error = "Lỗi cập nhật CV";
+    } catch (e, s) {
+      _tasks = originalTasksState;
+      _selectedCategoryFilter = originalFilter;
+      _setError("Lỗi cập nhật phân loại CV khi xóa category: $e", s);
       notifyListeners();
     }
   }
 
   void setCategoryFilter(String? category) {
-    final newFilter = (category == 'Tất cả') ? null : category;
+    final newFilter =
+        (category == 'Tất cả' || category == null || category.isEmpty)
+            ? null
+            : category;
     if (_selectedCategoryFilter != newFilter) {
       _selectedCategoryFilter = newFilter;
       notifyListeners();
@@ -299,16 +388,45 @@ class TaskViewModel with ChangeNotifier {
     }
   }
 
-  List<Task> searchTasks(String query) {
-    if (query.isEmpty) {
-      return [];
+  List<TaskViewData> searchTasks(String query) {
+    if (query.isEmpty) return [];
+
+    final q = query.toLowerCase().trim();
+    if (q.isEmpty) return [];
+
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+
+    final results =
+        _tasks.where((t) {
+          final titleMatch = t.title.toLowerCase().contains(q);
+          final descriptionMatch = t.description.toLowerCase().contains(q);
+          final categoryMatch = t.category?.toLowerCase().contains(q) ?? false;
+          return titleMatch || descriptionMatch || categoryMatch;
+        }).toList();
+
+    return results
+        .map((task) => _createTaskViewData(task, todayStart))
+        .toList();
+  }
+
+  void _setLoading(bool value) {
+    if (_isLoading != value) {
+      _isLoading = value;
+      notifyListeners();
     }
-    final q = query.toLowerCase();
-    return _tasks.where((t) {
-      final tl = t.title.toLowerCase();
-      final dl = t.description.toLowerCase();
-      final cl = t.category?.toLowerCase() ?? '';
-      return tl.contains(q) || dl.contains(q) || cl.contains(q);
-    }).toList();
+  }
+
+  void _setError(String? message, StackTrace? stackTrace) {
+    if (_error != message) {
+      _error = message;
+      if (message != null) {
+        debugPrint("ViewModel Error: $message");
+        if (stackTrace != null) {
+          debugPrint("$stackTrace");
+        }
+      }
+      notifyListeners();
+    }
   }
 }

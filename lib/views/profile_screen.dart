@@ -1,14 +1,11 @@
 import 'dart:math';
-
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-// --- Đảm bảo bạn đã import đúng đường dẫn tới các file model và viewmodel ---
 import 'package:workmanagement/models/task_model.dart';
 import 'package:workmanagement/viewmodels/category_viewmodel.dart';
 import 'package:workmanagement/viewmodels/task_viewmodel.dart';
-// -------------------------------------------------------------------------
 
 enum TimeRange { today, thisWeek, thisMonth, thisYear, allTime, custom }
 
@@ -118,13 +115,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   List<Task> _filterTasksByDate(List<Task> allTasks, DateTimeRange range) {
     final start = range.start;
-    final end =
-        (_selectedTimeRange == TimeRange.custom)
-            ? range.end.add(const Duration(microseconds: 1))
-            : range.end;
+    final end = range.end.add(const Duration(microseconds: 1));
 
-    // Giả định createdAt trong Task model là non-nullable (DateTime)
-    // Nếu createdAt là nullable (DateTime?), bạn cần thêm lại kiểm tra null
     return allTasks
         .where(
           (task) =>
@@ -152,7 +144,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final taskViewModel = context.watch<TaskViewModel>();
     final categoryViewModel = context.watch<CategoryViewModel>();
-    final allTasks = taskViewModel.tasks;
+    final allTasks = taskViewModel.allRawTasks;
     final theme = Theme.of(context);
 
     final dateTimeRange = _getDateTimeRange(_selectedTimeRange);
@@ -187,6 +179,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     categoryCounts.removeWhere(
       (key, value) => value == 0 && key != 'Chưa phân loại',
     );
+    if (categoryCounts['Chưa phân loại'] == 0 && categoryCounts.length > 1) {
+      categoryCounts.remove('Chưa phân loại');
+    }
 
     final totalCount = filteredTasks.length;
     double completedPercent = 0;
@@ -295,13 +290,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final double chipPaddingHorizontal = 10;
     final double chipPaddingVertical = 6;
-    final double chipSpacing = 8; // Khoảng cách giữa các chip và các hàng
+    final double chipSpacing = 8;
 
-    // Hàm tạo một ChoiceChip chuẩn
     Widget buildChip(TimeRange range) {
       final bool isSelected = _selectedTimeRange == range;
-      String text = '';
-
+      String text;
       switch (range) {
         case TimeRange.today:
           text = 'Hôm nay';
@@ -310,16 +303,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           text = 'Tuần này';
           break;
         case TimeRange.thisMonth:
-          text = 'Tháng­ ­này';
+          text = 'Tháng này';
           break;
         case TimeRange.thisYear:
           text = 'Năm nay';
           break;
         case TimeRange.allTime:
-          text = 'Tất cả    ';
+          text = 'Tất cả';
           break;
         case TimeRange.custom:
-          text = 'Tùy chọn  ';
+          text = 'Tùy chọn';
           break;
       }
 
@@ -327,10 +320,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         key: ValueKey(range),
         label: Text(
           text,
-          overflow: TextOverflow.ellipsis, // Xử lý tràn chữ
-          textAlign: TextAlign.center, // Canh giữa text
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
         ),
-        // avatar: null, // Đảm bảo không có avatar
         selected: isSelected,
         onSelected: (selected) {
           if (range == TimeRange.custom) {
@@ -367,16 +359,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
-    // Hàm tạo một hàng chip với Expanded
     Widget buildChipRow(List<TimeRange> ranges) {
       return Row(
         children:
             ranges.map((range) {
               return Expanded(
                 child: Padding(
-                  // Thêm padding để tạo khoảng cách giữa các chip trong Expanded
                   padding: EdgeInsets.symmetric(horizontal: chipSpacing / 2),
-                  child: buildChip(range), // Đặt chip trực tiếp vào Padding
+                  child: buildChip(range),
                 ),
               );
             }).toList(),
@@ -390,19 +380,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(13), // Đã sửa deprecated
+            color: Colors.black.withAlpha(13),
             spreadRadius: 1,
             blurRadius: 5,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      // Sử dụng Column chứa 2 Row với Expanded
       child: Column(
-        mainAxisSize: MainAxisSize.min, // Co lại theo nội dung
+        mainAxisSize: MainAxisSize.min,
         children: [
           buildChipRow(rangesRow1),
-          SizedBox(height: chipSpacing), // Khoảng cách giữa 2 hàng
+          SizedBox(height: chipSpacing),
           buildChipRow(rangesRow2),
         ],
       ),
@@ -421,7 +410,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       children: [
         CircleAvatar(
           radius: 24,
-          backgroundColor: color.withAlpha(38), // Đã sửa deprecated
+          backgroundColor: color.withAlpha(38),
           child: Icon(icon, size: 24, color: color),
         ),
         const SizedBox(height: 8),
@@ -569,7 +558,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         pendingColor,
                       ),
                     ),
-                    const SizedBox(width: 32), // Khoảng cách giữa 2 biểu đồ
+                    const SizedBox(width: 32),
                     Expanded(
                       flex: 2,
                       child: _buildPieChart(
@@ -632,11 +621,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
-          'Biểu đồ số lượng công việc hoàn thành',
+          'Số lượng công việc',
           style: titleStyle,
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 16), // Đã tăng khoảng cách
+        const SizedBox(height: 16),
         SizedBox(
           height: 190,
           child: BarChart(
@@ -650,18 +639,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   tooltipPadding: const EdgeInsets.all(8),
                   tooltipMargin: 8,
                   getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                    String label;
-                    switch (group.x.toInt()) {
-                      case 0:
-                        label = 'Hoàn thành';
-                        break;
-                      case 1:
-                        label = 'Chưa xong';
-                        break;
-                      default:
-                        label = '';
-                        break;
-                    }
+                    String label =
+                        (group.x.toInt() == 0) ? 'Hoàn thành' : 'Chưa xong';
                     return BarTooltipItem(
                       '$label\n',
                       const TextStyle(
@@ -698,10 +677,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     reservedSize: 32,
                     interval: interval,
                     getTitlesWidget: (value, meta) {
-                      if (value % 1 != 0) {
-                        return Container();
-                      }
-                      if (value != 0 && value % interval != 0) {
+                      if (value == 0 || value % interval != 0) {
                         return Container();
                       }
                       if (value == 0 && maxY <= interval * 1.5) {
@@ -802,6 +778,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
     }
+
     final titleStyle = theme.textTheme.titleSmall?.copyWith(
       fontWeight: FontWeight.w600,
     );
@@ -811,11 +788,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
-          'Biểu đồ tỷ lệ công việc hoàn thành',
+          'Tỷ lệ hoàn thành',
           style: titleStyle,
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 16), // Đã tăng khoảng cách
+        const SizedBox(height: 16),
         SizedBox(
           height: 190,
           child: Column(
@@ -892,6 +869,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       Colors.indigo.shade300,
       Colors.amber.shade400,
       Colors.deepOrange.shade300,
+      Colors.pink.shade200,
+      Colors.lime.shade400,
     ];
 
     return Card(
@@ -911,7 +890,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            // Sử dụng if/else với {} đúng cách
             if (sortedCategories.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24.0),

@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
-// Enum cho mức độ ưu tiên
 enum Priority { low, medium, high }
 
-// Extension để lấy màu và text từ Priority
 extension PriorityExtension on Priority {
   Color get priorityColor {
     switch (this) {
       case Priority.high:
-        return Colors.red;
+        return Colors.red.shade600;
       case Priority.medium:
-        return Colors.orange;
+        return Colors.orange.shade700;
       case Priority.low:
-        return Colors.green;
+        return Colors.green.shade600;
     }
   }
 
@@ -28,7 +27,6 @@ extension PriorityExtension on Priority {
   }
 }
 
-// Lớp cho các công việc con (subtask)
 class Subtask {
   String title;
   bool isDone;
@@ -46,7 +44,6 @@ class Subtask {
   );
 }
 
-// Lớp chính cho công việc (task)
 class Task {
   final String id;
   String title;
@@ -76,12 +73,13 @@ class Task {
     this.isDone = false,
     DateTime? createdAt,
     DateTime? completedAtParam,
-  }) : id = id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+  }) : id = id ?? const Uuid().v4(),
        subtasks = subtasks ?? [],
        attachments = attachments ?? [],
        createdAt = createdAt ?? DateTime.now() {
-    completedAt = isDone ? (completedAtParam ?? DateTime.now()) : null;
-    if (!isDone) {
+    if (isDone) {
+      completedAt = completedAtParam ?? DateTime.now();
+    } else {
       completedAt = null;
     }
   }
@@ -104,11 +102,14 @@ class Task {
     bool setDueTimeNull = false,
     bool setCategoryNull = false,
     bool setStickerNull = false,
+    bool setCompletedAtNull = false,
   }) {
-    bool finalIsDone = isDone ?? this.isDone;
+    final bool finalIsDone = isDone ?? this.isDone;
     DateTime? finalCompletedAt;
 
-    if (isDone != null) {
+    if (setCompletedAtNull) {
+      finalCompletedAt = null;
+    } else if (isDone != null) {
       finalCompletedAt =
           finalIsDone
               ? (completedAt ?? this.completedAt ?? DateTime.now())
@@ -161,13 +162,14 @@ class Task {
       try {
         final parts = timeString.split(':');
         if (parts.length == 2) {
-          return TimeOfDay(
-            hour: int.parse(parts[0]),
-            minute: int.parse(parts[1]),
-          );
+          final hour = int.tryParse(parts[0]);
+          final minute = int.tryParse(parts[1]);
+          if (hour != null && minute != null) {
+            return TimeOfDay(hour: hour, minute: minute);
+          }
         }
       } catch (e) {
-        // --- LỖI 1 (Line 170): Đã xóa print ---
+        debugPrint("Lỗi parse TimeOfDay: $e, Input: $timeString");
       }
       return null;
     }
@@ -177,19 +179,22 @@ class Task {
       if (fontFamily == 'MaterialIcons') {
         return IconData(codePoint, fontFamily: 'MaterialIcons');
       }
+      debugPrint(
+        "Không thể parse IconData: codePoint=$codePoint, fontFamily=$fontFamily",
+      );
       return null;
     }
 
     return Task(
-      id:
-          json['id'] as String? ??
-          DateTime.now().millisecondsSinceEpoch.toString(),
+      id: json['id'] as String? ?? const Uuid().v4(),
       title: json['title'] as String? ?? '',
       description: json['description'] as String? ?? '',
       priority:
           Priority.values[json['priority'] as int? ?? Priority.medium.index],
       dueDate:
-          json['dueDate'] == null ? null : DateTime.tryParse(json['dueDate']),
+          json['dueDate'] == null
+              ? null
+              : DateTime.tryParse(json['dueDate'] as String? ?? ''),
       dueTime: parseTimeOfDay(json['dueTime'] as String?),
       subtasks:
           (json['subtasks'] as List<dynamic>?)
@@ -213,7 +218,7 @@ class Task {
       completedAtParam:
           json['completedAt'] == null
               ? null
-              : DateTime.tryParse(json['completedAt']),
+              : DateTime.tryParse(json['completedAt'] as String? ?? ''),
     );
   }
 }

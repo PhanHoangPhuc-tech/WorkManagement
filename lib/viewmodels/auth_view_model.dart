@@ -3,7 +3,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import 'package:logger/logger.dart';
-import 'package:workmanagement/screens/tabs/home_page.dart';
+import 'package:workmanagement/views/home_page.dart';
 
 class AuthViewModel extends ChangeNotifier {
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
@@ -21,28 +21,28 @@ class AuthViewModel extends ChangeNotifier {
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
-        return;  // Người dùng hủy đăng nhập
+        return; // Người dùng hủy đăng nhập
       }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
       final AuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      final UserCredential userCredential = await _firebaseAuth.signInWithCredential(credential);
+      final UserCredential userCredential = await _firebaseAuth
+          .signInWithCredential(credential);
       _user = UserModel.fromFirebaseUser(userCredential.user!);
 
-      notifyListeners();  
+      notifyListeners();
 
       final userId = userCredential.user?.uid ?? "";
-      
+
       if (context.mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => HomePage(userId: userId), 
-          ),
+          MaterialPageRoute(builder: (context) => HomePage(userId: userId)),
         );
       }
     } catch (e) {
