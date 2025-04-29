@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:workmanagement/viewmodels/category_viewmodel.dart';
 import 'package:workmanagement/viewmodels/task_viewmodel.dart';
 import 'package:workmanagement/models/task_model.dart';
-import 'dart:io';
 
 class EditTaskScreen extends StatefulWidget {
   final Task task;
@@ -97,15 +96,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
       lastDate: DateTime(2101),
       locale: const Locale('vi', 'VN'),
       builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-              primary: Theme.of(context).primaryColor,
-              onPrimary: Colors.white,
-            ),
-          ),
-          child: child!,
-        );
+        return child!;
       },
     );
     if (picked != null && picked != _selectedDate) {
@@ -118,15 +109,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
       context: context,
       initialTime: _selectedTime ?? TimeOfDay.now(),
       builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-              primary: Theme.of(context).primaryColor,
-              onPrimary: Colors.white,
-            ),
-          ),
-          child: child!,
-        );
+        return child!;
       },
     );
     if (picked != null && picked != _selectedTime) {
@@ -156,20 +139,21 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
   }
 
   void _showStickerDialog() {
+    final theme = Theme.of(context);
     showDialog(
       context: context,
       builder:
           (ctx) => AlertDialog(
             title: const Text('Chọn Sticker'),
-            contentPadding: const EdgeInsets.all(16),
+            contentPadding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
             content: SizedBox(
               width: double.maxFinite,
               child: GridView.builder(
                 shrinkWrap: true,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 5,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
                 ),
                 itemCount: _stickerOptions.length,
                 itemBuilder: (ctxGrid, idx) {
@@ -186,21 +170,17 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                         border: Border.all(
                           color:
                               isSelected
-                                  ? Theme.of(ctxGrid).primaryColor
-                                  : Colors.grey.shade300,
-                          width: isSelected ? 1.5 : 1.0,
+                                  ? theme.primaryColor
+                                  : theme.dividerColor.withAlpha(150),
+                          width: isSelected ? 2.0 : 1.0,
                         ),
                         borderRadius: BorderRadius.circular(8),
                         color:
                             isSelected
-                                ? Theme.of(ctxGrid).primaryColor.withAlpha(26)
-                                : null,
+                                ? theme.primaryColor.withAlpha(30)
+                                : theme.dialogTheme.backgroundColor,
                       ),
-                      child: Icon(
-                        icon,
-                        size: 28,
-                        color: Theme.of(ctxGrid).primaryColor,
-                      ),
+                      child: Icon(icon, size: 28, color: theme.primaryColor),
                     ),
                   );
                 },
@@ -217,9 +197,9 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                     setState(() => _selectedSticker = null);
                     Navigator.pop(ctx);
                   },
-                  child: const Text(
+                  child: Text(
                     'Xóa Sticker',
-                    style: TextStyle(color: Colors.red),
+                    style: TextStyle(color: theme.colorScheme.error),
                   ),
                 ),
             ],
@@ -272,6 +252,8 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
         _isSaving = true;
       });
       final taskViewModel = context.read<TaskViewModel>();
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
 
       for (int i = 0; i < _subtasks.length; i++) {
         if (i < _subtaskControllers.length) {
@@ -308,20 +290,18 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
         await taskViewModel.updateTask(updatedTask);
         if (!mounted) return;
 
-        if (mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Đã cập nhật "${updatedTask.title}"')),
-          );
-        }
+        navigator.pop();
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('Đã cập nhật "${updatedTask.title}"')),
+        );
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text(
               'Lỗi cập nhật: ${e.toString().replaceFirst('Exception: ', '')}',
             ),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       } finally {
@@ -336,10 +316,15 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
 
   String _getAttachmentDisplayName(String attachmentIdentifier) {
     try {
-      return attachmentIdentifier.split(Platform.pathSeparator).last;
+      Uri uri = Uri.parse(attachmentIdentifier);
+      if (uri.pathSegments.isNotEmpty) {
+        String fullName = Uri.decodeComponent(uri.pathSegments.last);
+        return fullName.split('%2F').last;
+      }
+      return attachmentIdentifier.split('/').last;
     } catch (_) {
-      if (attachmentIdentifier.length > 20) {
-        return "...${attachmentIdentifier.substring(attachmentIdentifier.length - 15)}";
+      if (attachmentIdentifier.length > 25) {
+        return "...${attachmentIdentifier.substring(attachmentIdentifier.length - 20)}";
       }
       return attachmentIdentifier;
     }
@@ -350,6 +335,13 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
     final localizations = MaterialLocalizations.of(context);
     final availableCategories = context.watch<CategoryViewModel>().categories;
     final theme = Theme.of(context);
+    final bool isDarkMode = theme.brightness == Brightness.dark;
+
+    final defaultInputBorder = theme.inputDecorationTheme.border;
+    final defaultRadius =
+        (defaultInputBorder is OutlineInputBorder)
+            ? defaultInputBorder.borderRadius.topLeft.x
+            : 8.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -363,12 +355,12 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
           IconButton(
             icon:
                 _isSaving
-                    ? const SizedBox(
+                    ? SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: theme.colorScheme.onPrimary,
                       ),
                     )
                     : const Icon(Icons.check),
@@ -394,7 +386,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                       color:
                           _selectedSticker != null
                               ? theme.primaryColor
-                              : Colors.grey,
+                              : theme.iconTheme.color?.withAlpha(150),
                     ),
                     tooltip: 'Chọn Sticker',
                     onPressed: _showStickerDialog,
@@ -404,12 +396,29 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _titleController,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Tiêu đề công việc...',
-                        labelStyle: TextStyle(fontSize: 18),
+                        labelStyle: TextStyle(
+                          fontSize: 18,
+                          color: theme.hintColor,
+                        ),
                         hintText: 'Nhập tiêu đề công việc',
-                        border: UnderlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(vertical: 10),
+                        border: const UnderlineInputBorder(),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: theme.primaryColor,
+                            width: 1.5,
+                          ),
+                        ),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: theme.dividerColor,
+                            width: 1.0,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                        ),
                       ),
                       style: const TextStyle(
                         fontSize: 18,
@@ -425,25 +434,21 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               TextFormField(
                 controller: _descriptionController,
                 decoration: const InputDecoration(
                   labelText: 'Mô tả',
                   hintText: 'Thêm mô tả chi tiết công việc...',
                   alignLabelWithHint: true,
-                  border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.description_outlined),
                 ),
                 maxLines: 4,
                 textInputAction: TextInputAction.newline,
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Ưu tiên:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 8),
+              Text('Ưu tiên:', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children:
@@ -457,27 +462,31 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                                 setState(() => _selectedPriority = p);
                               }
                             },
-                            selectedColor: p.priorityColor.withAlpha(204),
+                            selectedColor: p.priorityColor.withAlpha(220),
+                            backgroundColor: theme.chipTheme.backgroundColor,
+                            side:
+                                theme.chipTheme.side ??
+                                BorderSide(color: theme.dividerColor),
                             avatar: Icon(
                               Icons.flag,
                               size: 16,
                               color:
                                   _selectedPriority == p
-                                      ? Colors.white
+                                      ? (isDarkMode
+                                          ? Colors.black
+                                          : Colors.white)
                                       : p.priorityColor,
                             ),
                             labelStyle: TextStyle(
+                              fontSize: 13,
                               color:
                                   _selectedPriority == p
-                                      ? Colors.white
-                                      : Colors.black87,
+                                      ? (isDarkMode
+                                          ? Colors.black
+                                          : Colors.white)
+                                      : theme.chipTheme.labelStyle?.color,
                             ),
                             showCheckmark: false,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            visualDensity: VisualDensity.compact,
                           ),
                         )
                         .toList(),
@@ -489,8 +498,8 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Phân loại',
                   prefixIcon: Icon(Icons.label_outline),
-                  border: OutlineInputBorder(),
                 ),
+                dropdownColor: theme.colorScheme.surface,
                 items:
                     availableCategories
                         .map(
@@ -503,21 +512,18 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                 onChanged: (v) => setState(() => _selectedCategory = v),
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Hạn chót:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 8),
+              Text('Hạn chót:', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
                     child: InkWell(
                       onTap: () => _selectDate(context),
+                      borderRadius: BorderRadius.circular(defaultRadius),
                       child: InputDecorator(
                         decoration: const InputDecoration(
                           labelText: 'Ngày',
                           prefixIcon: Icon(Icons.calendar_today, size: 20),
-                          border: OutlineInputBorder(),
                           contentPadding: EdgeInsets.symmetric(
                             horizontal: 12,
                             vertical: 15,
@@ -529,7 +535,9 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                               : DateFormat('dd/MM/yyyy').format(_selectedDate!),
                           style: TextStyle(
                             color:
-                                _selectedDate == null ? Colors.grey[700] : null,
+                                _selectedDate == null
+                                    ? theme.hintColor
+                                    : theme.textTheme.bodyLarge?.color,
                           ),
                         ),
                       ),
@@ -539,11 +547,11 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                   Expanded(
                     child: InkWell(
                       onTap: () => _selectTime(context),
+                      borderRadius: BorderRadius.circular(defaultRadius),
                       child: InputDecorator(
                         decoration: const InputDecoration(
                           labelText: 'Giờ',
                           prefixIcon: Icon(Icons.access_time, size: 20),
-                          border: OutlineInputBorder(),
                           contentPadding: EdgeInsets.symmetric(
                             horizontal: 12,
                             vertical: 15,
@@ -558,7 +566,9 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                               ),
                           style: TextStyle(
                             color:
-                                _selectedTime == null ? Colors.grey[700] : null,
+                                _selectedTime == null
+                                    ? theme.hintColor
+                                    : theme.textTheme.bodyLarge?.color,
                           ),
                         ),
                       ),
@@ -567,10 +577,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Công việc con:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
+              Text('Công việc con:', style: theme.textTheme.titleMedium),
               const SizedBox(height: 8),
               ListView.builder(
                 shrinkWrap: true,
@@ -593,20 +600,23 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                             }
                           }),
                       visualDensity: VisualDensity.compact,
-                      activeColor: Theme.of(context).primaryColor,
                     ),
                     title: TextField(
                       controller: controller,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: 'Công việc con...',
                         border: InputBorder.none,
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(vertical: 4),
+                        hintStyle: TextStyle(color: theme.hintColor),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 4),
                       ),
                       style: TextStyle(
                         decoration:
                             subtask.isDone ? TextDecoration.lineThrough : null,
-                        color: subtask.isDone ? Colors.grey[600] : null,
+                        color:
+                            subtask.isDone
+                                ? theme.disabledColor
+                                : theme.textTheme.bodyLarge?.color,
                       ),
                       textInputAction: TextInputAction.done,
                       onSubmitted: (_) {
@@ -632,7 +642,7 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                     trailing: IconButton(
                       icon: Icon(
                         Icons.remove_circle_outline,
-                        color: Colors.red.shade300,
+                        color: theme.colorScheme.error.withAlpha(200),
                       ),
                       onPressed: () => _removeSubtask(idx),
                       splashRadius: 20,
@@ -645,16 +655,20 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                 children: [
                   Padding(
                     padding: const EdgeInsets.only(left: 12.0, right: 12.0),
-                    child: Icon(Icons.add, color: Colors.grey.shade400),
+                    child: Icon(
+                      Icons.add,
+                      color: theme.iconTheme.color?.withAlpha(150),
+                    ),
                   ),
                   Expanded(
                     child: TextField(
                       controller: _subtaskTitleController,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: 'Thêm công việc con mới...',
                         border: InputBorder.none,
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(
+                        hintStyle: TextStyle(color: theme.hintColor),
+                        contentPadding: const EdgeInsets.symmetric(
                           vertical: 10,
                           horizontal: 0,
                         ),
@@ -666,22 +680,21 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                   IconButton(
                     icon: Icon(
                       Icons.add_circle_outline,
-                      color: Theme.of(context).primaryColor,
+                      color: theme.primaryColor,
                     ),
                     onPressed: _addSubtask,
                     tooltip: 'Thêm công việc con',
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
-              const Text(
-                'Đính kèm:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
+              Divider(color: theme.dividerColor),
+              const SizedBox(height: 16),
+              Text('Đính kèm:', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 12),
               Wrap(
                 spacing: 8.0,
-                runSpacing: 4.0,
+                runSpacing: 8.0,
                 children: [
                   ..._existingAttachmentIdentifiers.asMap().entries.map((
                     entry,
@@ -689,61 +702,39 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                     int idx = entry.key;
                     String identifier = entry.value;
                     return Chip(
-                      label: Text(
-                        _getAttachmentDisplayName(identifier),
-                        style: const TextStyle(fontSize: 12),
-                      ),
+                      label: Text(_getAttachmentDisplayName(identifier)),
                       avatar: Icon(
                         Icons.cloud_done_outlined,
                         size: 16,
                         color: Colors.green[700],
                       ),
-                      deleteIconColor: Colors.red[400],
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
+                      deleteIconColor: theme.colorScheme.error.withAlpha(200),
                       onDeleted: () => _removeExistingAttachment(idx),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     );
                   }),
                   ..._selectedFiles.asMap().entries.map((entry) {
                     int idx = entry.key;
                     PlatformFile file = entry.value;
                     return Chip(
-                      label: Text(
-                        file.name,
-                        style: const TextStyle(fontSize: 12),
-                      ),
+                      label: Text(file.name),
                       avatar: Icon(
                         Icons.attach_file,
                         size: 16,
-                        color: Colors.grey[700],
+                        color: theme.chipTheme.labelStyle?.color?.withAlpha(
+                          200,
+                        ),
                       ),
-                      deleteIconColor: Colors.red[400],
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
+                      deleteIconColor: theme.colorScheme.error.withAlpha(200),
                       onDeleted: () => _removeNewAttachment(idx),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     );
                   }),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               OutlinedButton.icon(
                 icon: const Icon(Icons.attach_file, size: 18),
                 label: const Text('Chọn/Thêm tệp'),
                 onPressed: _pickFiles,
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  textStyle: const TextStyle(fontSize: 13),
-                  side: BorderSide(color: Colors.grey.shade400),
-                ),
               ),
               const SizedBox(height: 20),
             ],

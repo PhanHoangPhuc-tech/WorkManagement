@@ -169,7 +169,7 @@ class CalendarViewModel with ChangeNotifier {
     );
     if (!isSameDay(_focusedDay, newFocusedDay)) {
       _focusedDay = newFocusedDay;
-      notifyListeners(); // Đã thêm dòng này
+      notifyListeners();
     }
   }
 

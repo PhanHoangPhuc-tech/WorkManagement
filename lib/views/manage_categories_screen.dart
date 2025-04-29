@@ -104,7 +104,6 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
     Function(VoidCallback) stfSetState,
   ) async {
     final String categoryName = _categoryDialogController.text;
-    // --- Sửa LỖI 1 (Line 117): Lấy Navigator trước await ---
     final navigator = Navigator.of(dialogContext);
     try {
       if (editIndex != null) {
@@ -114,7 +113,7 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
       }
 
       if (!mounted) return;
-      navigator.pop(); // Dùng navigator đã lấy trước đó
+      navigator.pop();
       _categoryDialogController.clear();
     } on Exception catch (e) {
       stfSetState(
@@ -129,7 +128,6 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
     final categoryViewModel = context.read<CategoryViewModel>();
     final taskViewModel = context.read<TaskViewModel>();
     bool isLoading = categoryViewModel.isLoading;
-    // Lấy ScaffoldMessenger trước khi vào dialog/await để dùng sau
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     showDialog(
@@ -152,9 +150,8 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
                     isLoading
                         ? null
                         : () async {
-                          // Lấy navigator của dialog trước khi pop
                           final dialogNavigator = Navigator.of(dialogContext);
-                          dialogNavigator.pop(); // Pop dialog xác nhận trước
+                          dialogNavigator.pop();
 
                           try {
                             final deletedName = await categoryViewModel
@@ -165,7 +162,6 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
                               await taskViewModel.handleCategoryDeleted(
                                 deletedName,
                               );
-                              // Không cần kiểm tra mounted nữa vì đã lấy scaffoldMessenger trước
                               scaffoldMessenger.showSnackBar(
                                 SnackBar(
                                   content: Text('Đã xóa "$deletedName"'),
@@ -173,7 +169,6 @@ class _ManageCategoriesScreenState extends State<ManageCategoriesScreen> {
                               );
                             }
                           } catch (e) {
-                            // Không cần kiểm tra mounted nữa vì đã lấy scaffoldMessenger trước
                             scaffoldMessenger.showSnackBar(
                               SnackBar(
                                 content: Text(

@@ -26,6 +26,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   void _navigateToEditTask(BuildContext context, Task task) {
+    if (!context.mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => EditTaskScreen(task: task)),
@@ -34,6 +35,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bool isDarkMode = theme.brightness == Brightness.dark;
+
     final Map<CalendarFormat, String> availableCalendarFormatsMap = const {
       CalendarFormat.month: 'Tháng',
       CalendarFormat.twoWeeks: '2 Tuần',
@@ -41,11 +45,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
     };
 
     final headerTitleStyle =
-        Theme.of(context).textTheme.titleMedium?.copyWith(
+        theme.textTheme.titleMedium?.copyWith(
           fontSize: 15.0,
           fontWeight: FontWeight.bold,
         ) ??
         const TextStyle(fontSize: 15.0, fontWeight: FontWeight.bold);
+
+    final Color weekendColor =
+        isDarkMode ? theme.colorScheme.error.withAlpha(200) : Colors.red[400]!;
+
+    final Color weekdayColor =
+        theme.textTheme.bodySmall?.color?.withAlpha(isDarkMode ? 200 : 255) ??
+        Colors.grey[700]!;
+
+    final Color markerColor =
+        isDarkMode
+            ? theme.colorScheme.secondary.withAlpha(200)
+            : Colors.grey[400]!;
 
     return Consumer<CalendarViewModel>(
       builder: (context, viewModel, child) {
@@ -63,10 +79,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 child: Row(
                   children: [
                     IconButton(
-                      icon: Icon(
-                        Icons.chevron_left,
-                        color: Theme.of(context).primaryColor,
-                      ),
+                      icon: Icon(Icons.chevron_left, color: theme.primaryColor),
                       onPressed: () {
                         final currentFocusedDay = viewModel.focusedDay;
                         final prevMonthDay = DateTime(
@@ -90,7 +103,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     IconButton(
                       icon: Icon(
                         Icons.chevron_right,
-                        color: Theme.of(context).primaryColor,
+                        color: theme.primaryColor,
                       ),
                       onPressed: () {
                         final currentFocusedDay = viewModel.focusedDay;
@@ -118,6 +131,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 availableCalendarFormats: availableCalendarFormatsMap,
                 calendarStyle: CalendarStyle(
                   cellPadding: const EdgeInsets.all(4.0),
+                  defaultTextStyle: TextStyle(
+                    color: theme.textTheme.bodyMedium?.color,
+                  ),
+                  weekendTextStyle: TextStyle(color: weekendColor),
+                  outsideTextStyle: TextStyle(
+                    color: theme.hintColor.withAlpha(100),
+                  ),
                   defaultDecoration: const BoxDecoration(
                     shape: BoxShape.rectangle,
                     color: Colors.transparent,
@@ -126,23 +146,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     shape: BoxShape.rectangle,
                     color: Colors.transparent,
                   ),
-                  outsideDaysVisible: false,
+                  outsideDaysVisible: true,
                   selectedDecoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor,
+                    color: theme.primaryColor,
                     shape: BoxShape.circle,
                   ),
-                  selectedTextStyle: const TextStyle(color: Colors.white),
+                  selectedTextStyle: TextStyle(
+                    color: theme.colorScheme.onPrimary,
+                  ),
                   todayDecoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor.withAlpha(77),
+                    color: theme.primaryColor.withAlpha(77),
                     shape: BoxShape.circle,
                   ),
                   todayTextStyle: TextStyle(
-                    color: Theme.of(context).primaryColorDark,
+                    color: theme.primaryColor,
+                    fontWeight: FontWeight.bold,
                   ),
                   markerDecoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.secondary.withAlpha(179),
+                    color: markerColor,
                     shape: BoxShape.circle,
                   ),
                   markerSize: 5.0,
@@ -159,14 +180,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
                 daysOfWeekHeight: 20.0,
                 daysOfWeekStyle: DaysOfWeekStyle(
-                  weekdayStyle: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey[700],
-                  ),
-                  weekendStyle: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey[700],
-                  ),
+                  weekdayStyle: TextStyle(fontSize: 13, color: weekdayColor),
+                  weekendStyle: TextStyle(fontSize: 13, color: weekendColor),
                 ),
                 onDaySelected: (selectedDay, focusedDay) {
                   if (!isSameDay(viewModel.selectedDay, selectedDay)) {
@@ -193,52 +208,56 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     children: [
                       Text(
                         "Công việc ngày: ${DateFormat('dd/MM/yyyy', 'vi_VN').format(viewModel.selectedDay!)}",
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       const Spacer(),
                       if (!isSameDay(viewModel.selectedDay, today))
-                        TextButton(
+                        ElevatedButton(
                           onPressed: () {
                             context.read<CalendarViewModel>().selectToday();
                           },
-                          style: TextButton.styleFrom(
+                          style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,
                               vertical: 4,
                             ),
+                            backgroundColor:
+                                isDarkMode
+                                    ? theme.colorScheme.secondary
+                                    : theme.primaryColor,
+                            foregroundColor:
+                                isDarkMode
+                                    ? theme.colorScheme.onSecondary
+                                    : theme.colorScheme.onPrimary,
+                            textStyle: const TextStyle(fontSize: 12),
                             visualDensity: VisualDensity.compact,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            side: BorderSide(
-                              color: Theme.of(
-                                context,
-                                // ignore: deprecated_member_use
-                              ).primaryColor.withOpacity(0.5),
-                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12.0),
                             ),
+                            elevation: 1,
                           ),
-                          child: Text(
-                            'Quay về hôm nay',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context).primaryColor,
-                            ),
-                          ),
+                          child: const Text('Quay về hôm nay'),
                         ),
                     ],
                   ),
                 ),
-              const Divider(height: 1, thickness: 1, indent: 0, endIndent: 0),
+              Divider(
+                height: 1,
+                thickness: 1,
+                indent: 0,
+                endIndent: 0,
+                color: theme.dividerColor,
+              ),
               Expanded(
                 child:
                     viewModel.tasksForSelectedDay.isEmpty
                         ? Center(
                           child: Text(
                             'Không có công việc nào cho ngày này.',
-                            style: TextStyle(color: Colors.grey[600]),
+                            style: TextStyle(color: theme.hintColor),
                           ),
                         )
                         : ListView.separated(
@@ -255,11 +274,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             );
                           },
                           separatorBuilder:
-                              (context, index) => const Divider(
+                              (context, index) => Divider(
                                 height: 1,
                                 thickness: 0.5,
-                                indent: 16,
+                                indent: 56,
                                 endIndent: 16,
+                                color: theme.dividerColor.withAlpha(150),
                               ),
                         ),
               ),
@@ -277,6 +297,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
   ) {
     final theme = Theme.of(context);
     final bool isDone = taskData.isDone;
+    final bool isDarkMode = theme.brightness == Brightness.dark;
+
+    final Color? titleColor =
+        isDone
+            ? theme.textTheme.bodyLarge?.color?.withAlpha(128)
+            : theme.textTheme.bodyLarge?.color;
+    final Color? subtitleColor = theme.textTheme.bodySmall?.color?.withAlpha(
+      180,
+    );
+    final Color? tileBackgroundColor =
+        isDone
+            ? (isDarkMode
+                ? Colors.white.withAlpha(5)
+                : Colors.grey.shade100.withAlpha(180))
+            : null;
 
     return ListTile(
       leading: Icon(
@@ -291,7 +326,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         style: TextStyle(
           decoration: isDone ? TextDecoration.lineThrough : null,
           fontWeight: FontWeight.w500,
-          color: isDone ? Colors.grey[600] : null,
+          color: titleColor,
         ),
       ),
       subtitle: Text(
@@ -304,7 +339,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 13,
-          color: Colors.grey[600],
+          color: subtitleColor,
           decoration: isDone ? TextDecoration.lineThrough : null,
         ),
       ),
@@ -312,13 +347,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
       onTap: () {
         _navigateToEditTask(context, originalTask);
       },
-      tileColor:
-          isDone ? Colors.grey.shade100.withAlpha(128) : Colors.transparent,
+      tileColor: tileBackgroundColor,
       contentPadding: const EdgeInsets.symmetric(
         horizontal: 16.0,
-        vertical: 2.0,
+        vertical: 6.0,
       ),
-      dense: true,
+      dense: false,
     );
   }
 }

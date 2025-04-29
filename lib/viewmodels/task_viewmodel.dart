@@ -407,7 +407,7 @@ class TaskViewModel with ChangeNotifier {
         "Cập nhật thành công task: ${taskToSave.title} với ${finalAttachmentsForDB.length} đính kèm.",
       );
     } catch (e, s) {
-      _tasks[index] = originalTask; // Rollback lại task gốc nếu có lỗi
+      _tasks[index] = originalTask;
       _setError("Lỗi cập nhật công việc: $e", s);
       notifyListeners();
       debugPrint(
@@ -416,7 +416,6 @@ class TaskViewModel with ChangeNotifier {
     }
   }
 
-  // --- HÀM DELETE TASK ĐÃ CẬP NHẬT ---
   Future<void> deleteTask(String taskId) async {
     if (_isLoading) {
       debugPrint("ViewModel đang bận, bỏ qua deleteTask");
@@ -431,16 +430,13 @@ class TaskViewModel with ChangeNotifier {
     final taskToDelete = _tasks[index];
     List<String> attachmentsToDelete = List.from(taskToDelete.attachments);
 
-    // Optimistic Update
     _tasks.removeAt(index);
     notifyListeners();
 
     try {
-      // Xóa Task chính từ Repository
       await _repository.deleteTask(taskId);
       debugPrint("Xóa thành công task ID: $taskId từ repository.");
 
-      // Nếu xóa task chính thành công, tiến hành xóa attachments
       if (attachmentsToDelete.isNotEmpty) {
         debugPrint(
           "Bắt đầu xóa ${attachmentsToDelete.length} file đính kèm cho task $taskId...",
@@ -450,7 +446,6 @@ class TaskViewModel with ChangeNotifier {
             await _deleteFile(identifier);
             debugPrint("Đã xóa file: $identifier");
           } catch (fileError, fileStack) {
-            // Chỉ ghi log, không dừng lại hoặc báo lỗi nghiêm trọng
             debugPrint(
               "Lỗi xóa file đính kèm $identifier: $fileError\n$fileStack",
             );
@@ -459,14 +454,11 @@ class TaskViewModel with ChangeNotifier {
         debugPrint("Đã xử lý xong việc xóa file đính kèm.");
       }
     } catch (e, s) {
-      // Rollback state nếu xóa Task chính thất bại
       _tasks.insert(index, taskToDelete);
       _setError("Lỗi xóa công việc: $e", s);
       notifyListeners();
-      // Không xóa attachments nếu xóa task chính thất bại
     }
   }
-  // --- KẾT THÚC HÀM DELETE TASK ĐÃ CẬP NHẬT ---
 
   Future<void> toggleTaskDone(String taskId) async {
     final index = _tasks.indexWhere((t) => t.id == taskId);

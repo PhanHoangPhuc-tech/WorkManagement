@@ -1,4 +1,4 @@
-import 'package:firebase_auth/firebase_auth.dart';  // Import firebase_auth
+import 'package:firebase_auth/firebase_auth.dart';
 
 class UserModel {
   final String uid;

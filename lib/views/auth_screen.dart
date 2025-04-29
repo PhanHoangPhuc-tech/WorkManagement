@@ -4,7 +4,7 @@ import '../viewmodels/auth_view_model.dart';
 import 'package:logger/logger.dart';
 
 class AuthScreen extends StatelessWidget {
-  const AuthScreen({super.key});  // Thay key: key bằng super.key
+  const AuthScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -15,7 +15,7 @@ class AuthScreen extends StatelessWidget {
       body: Padding(
         padding: const EdgeInsets.all(32.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween, 
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             // Tiêu đề
             Text(
@@ -64,11 +64,18 @@ class AuthScreen extends StatelessWidget {
                   // Kiểm tra xem widget có còn mounted không
                   if (!context.mounted) return;
 
-                  await Provider.of<AuthViewModel>(context, listen: false).signInWithGoogle(context);
+                  await Provider.of<AuthViewModel>(
+                    context,
+                    listen: false,
+                  ).signInWithGoogle(context);
 
                   // Sau khi hoàn thành đăng nhập, kiểm tra xem người dùng đã đăng nhập chưa
-                  if (context.mounted) { // Kiểm tra lại trước khi sử dụng BuildContext
-                    if (Provider.of<AuthViewModel>(context, listen: false).isAuthenticated) {
+                  if (context.mounted) {
+                    // Kiểm tra lại trước khi sử dụng BuildContext
+                    if (Provider.of<AuthViewModel>(
+                      context,
+                      listen: false,
+                    ).isAuthenticated) {
                       // Đăng nhập thành công
                       logger.i("Đăng nhập thành công");
                     } else {

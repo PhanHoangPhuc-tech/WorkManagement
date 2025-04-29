@@ -27,13 +27,24 @@ class _HomePageState extends State<HomePage> {
   void _confirmDeleteTask(BuildContext context, Task task) {
     final taskViewModel = context.read<TaskViewModel>();
     final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final theme = Theme.of(context);
 
     showDialog(
       context: context,
       builder: (dialogContext) {
+        final dialogTheme = Theme.of(dialogContext).dialogTheme;
+        final textTheme = Theme.of(dialogContext).textTheme;
+
         return AlertDialog(
-          title: const Text('Xác nhận xóa'),
-          content: Text('Xóa công việc "${task.title}"?'),
+          backgroundColor: dialogTheme.backgroundColor,
+          title: Text(
+            'Xác nhận xóa',
+            style: dialogTheme.titleTextStyle ?? textTheme.titleLarge,
+          ),
+          content: Text(
+            'Xóa công việc "${task.title}"?',
+            style: dialogTheme.contentTextStyle ?? textTheme.bodyMedium,
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
@@ -43,7 +54,7 @@ class _HomePageState extends State<HomePage> {
               builder: (context, vm, child) {
                 return TextButton(
                   style: TextButton.styleFrom(
-                    foregroundColor: Colors.red.shade700,
+                    foregroundColor: theme.colorScheme.error,
                   ),
                   onPressed:
                       vm.isLoading
@@ -59,26 +70,26 @@ class _HomePageState extends State<HomePage> {
                                 ),
                               );
                             } catch (e) {
-                              if (!mounted) return;
                               debugPrint("Lỗi xóa từ dialog: $e");
+                              if (!mounted) return;
                               scaffoldMessenger.showSnackBar(
                                 SnackBar(
                                   content: Text(
                                     'Lỗi khi xóa: ${vm.error ?? e.toString()}',
                                   ),
-                                  backgroundColor: Colors.red,
+                                  backgroundColor: theme.colorScheme.error,
                                 ),
                               );
                             }
                           },
                   child:
                       vm.isLoading
-                          ? const SizedBox(
+                          ? SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.red,
+                              color: theme.colorScheme.error,
                             ),
                           )
                           : const Text('Xóa'),
@@ -92,6 +103,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _navigateToEditTask(BuildContext context, Task task) {
+    if (!context.mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => EditTaskScreen(task: task)),
@@ -99,13 +111,15 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _navigateToAddTask(BuildContext context) {
+    if (!context.mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const CreateTaskScreen()),
     );
   }
 
-  void _navigateToManageCategories() {
+  void _navigateToManageCategories(BuildContext context) {
+    if (!context.mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ManageCategoriesScreen()),
@@ -114,8 +128,14 @@ class _HomePageState extends State<HomePage> {
 
   void _onFilterIconPressed() {
     final taskViewModel = context.read<TaskViewModel>();
+    final theme = Theme.of(context);
+    final bool isDarkMode = theme.brightness == Brightness.dark;
+
     showModalBottomSheet(
       context: context,
+      backgroundColor:
+          theme.bottomSheetTheme.modalBackgroundColor ??
+          (isDarkMode ? const Color(0xFF2A2A2A) : Colors.white),
       builder:
           (_) => Padding(
             padding: const EdgeInsets.all(16.0),
@@ -125,9 +145,9 @@ class _HomePageState extends State<HomePage> {
               children: [
                 Text(
                   'Tùy chọn lọc & Quản lý',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Consumer<TaskViewModel>(
@@ -139,19 +159,24 @@ class _HomePageState extends State<HomePage> {
                       onChanged: (value) {
                         taskViewModel.toggleShowCompleted(value);
                       },
-                      activeColor: Theme.of(context).primaryColor,
+                      activeColor: theme.primaryColor,
                     );
                   },
                 ),
-                const Divider(height: 1),
+                Divider(color: theme.dividerColor),
                 ListTile(
-                  leading: const Icon(Icons.category_outlined),
+                  leading: Icon(
+                    Icons.category_outlined,
+                    color: theme.listTileTheme.iconColor,
+                  ),
                   title: const Text('Quản lý phân loại'),
                   contentPadding: EdgeInsets.zero,
                   onTap: () {
+                    final navContext = context;
                     Navigator.pop(context);
-                    _navigateToManageCategories();
+                    _navigateToManageCategories(navContext);
                   },
+                  trailing: Icon(Icons.chevron_right, color: Colors.grey[600]),
                 ),
               ],
             ),
@@ -189,13 +214,14 @@ class _HomePageState extends State<HomePage> {
             icon: const Icon(Icons.search),
             tooltip: "Tìm kiếm",
             onPressed: () async {
+              final currentContext = context;
               final Task? selectedOriginalTask = await showSearch<Task?>(
-                context: context,
+                context: currentContext,
                 delegate: _searchDelegate,
               );
               if (!mounted || selectedOriginalTask == null) return;
               // ignore: use_build_context_synchronously
-              _navigateToEditTask(context, selectedOriginalTask);
+              _navigateToEditTask(currentContext, selectedOriginalTask);
             },
           ),
         ],
@@ -205,7 +231,6 @@ class _HomePageState extends State<HomePage> {
           return IndexedStack(index: _currentIndex, children: screens);
         },
       ),
-
       floatingActionButton:
           _currentIndex == 0
               ? FloatingActionButton(
@@ -216,11 +241,6 @@ class _HomePageState extends State<HomePage> {
               : null,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: Theme.of(context).primaryColor,
-        unselectedItemColor: Colors.grey[600],
-        selectedFontSize: 12,
-        unselectedFontSize: 12,
         onTap: (idx) {
           setState(() => _currentIndex = idx);
         },
@@ -258,6 +278,8 @@ class _HomePageState extends State<HomePage> {
     String? currentFilterValue,
   ) {
     Widget bodyContent;
+    final theme = Theme.of(context);
+    final bool isDarkMode = theme.brightness == Brightness.dark;
 
     final groupedTasksMap = taskVM.groupedTasks;
     final visibleSectionKeys = groupedTasksMap.keys.toList();
@@ -266,6 +288,23 @@ class _HomePageState extends State<HomePage> {
     final bool categoriesStillLoading =
         catVM.isLoading && catVM.categories.isEmpty;
 
+    final Color? expansionTitleColor =
+        isDarkMode
+            ? theme.textTheme.titleMedium?.color?.withAlpha(204)
+            : Colors.blueGrey.shade800;
+    final Color? emptyTextColor =
+        isDarkMode
+            ? theme.textTheme.bodyMedium?.color?.withAlpha(153)
+            : Colors.grey[700];
+    final Color filterBarBorderColor =
+        isDarkMode ? theme.dividerColor : Colors.grey.shade300;
+    final Color filterBarBackgroundColor =
+        isDarkMode ? theme.colorScheme.surface : Colors.white;
+    final Color expansionTileBorderColor =
+        isDarkMode ? theme.dividerColor : Colors.grey.shade300;
+    final Color? filterIconColor =
+        isDarkMode ? theme.iconTheme.color?.withAlpha(179) : Colors.grey[700];
+
     if (error != null && !isLoading) {
       bodyContent = Center(
         child: Padding(
@@ -273,17 +312,18 @@ class _HomePageState extends State<HomePage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 48),
-              const SizedBox(height: 16),
-              Text(
-                "Đã xảy ra lỗi",
-                style: Theme.of(context).textTheme.titleLarge,
+              Icon(
+                Icons.error_outline,
+                color: theme.colorScheme.error,
+                size: 48,
               ),
+              const SizedBox(height: 16),
+              Text("Đã xảy ra lỗi", style: theme.textTheme.titleLarge),
               const SizedBox(height: 8),
               Text(
                 error,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[700]),
+                style: TextStyle(color: emptyTextColor),
               ),
               const SizedBox(height: 20),
               ElevatedButton.icon(
@@ -301,7 +341,9 @@ class _HomePageState extends State<HomePage> {
         ),
       );
     } else if (isLoading && groupedTasksMap.isEmpty) {
-      bodyContent = const Center(child: CircularProgressIndicator());
+      bodyContent = Center(
+        child: CircularProgressIndicator(color: theme.primaryColor),
+      );
     } else if (groupedTasksMap.isEmpty && !isLoading) {
       bodyContent = Center(
         child: Padding(
@@ -311,11 +353,7 @@ class _HomePageState extends State<HomePage> {
                 ? 'Không có công việc nào trong phân loại "${taskVM.selectedCategoryFilter}".'
                 : 'Bạn chưa có công việc nào.\nNhấn (+) để thêm công việc mới!',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.grey[700],
-              fontSize: 16,
-              height: 1.5,
-            ),
+            style: TextStyle(color: emptyTextColor, fontSize: 16, height: 1.5),
           ),
         ),
       );
@@ -339,16 +377,17 @@ class _HomePageState extends State<HomePage> {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
-                  color: Colors.blueGrey.shade800,
+                  color: expansionTitleColor,
                 ),
               ),
               initiallyExpanded:
                   sectionTitle == 'Hôm nay' || sectionTitle == 'Quá hạn',
               maintainState: true,
-              collapsedIconColor: Colors.blueGrey,
-              iconColor: Theme.of(context).primaryColor,
+              collapsedIconColor:
+                  isDarkMode ? Colors.grey[500] : Colors.blueGrey,
+              iconColor: theme.primaryColor,
               shape: Border(
-                bottom: BorderSide(color: Colors.grey.shade300, width: 0.5),
+                bottom: BorderSide(color: expansionTileBorderColor, width: 0.5),
               ),
               tilePadding: const EdgeInsets.symmetric(
                 horizontal: 16.0,
@@ -359,7 +398,14 @@ class _HomePageState extends State<HomePage> {
                 right: 16.0,
                 bottom: 8.0,
               ),
-              backgroundColor: Colors.grey.shade50,
+              backgroundColor:
+                  isDarkMode
+                      ? theme.expansionTileTheme.backgroundColor
+                      : Colors.grey.shade50,
+              collapsedBackgroundColor:
+                  isDarkMode
+                      ? theme.expansionTileTheme.collapsedBackgroundColor
+                      : Colors.transparent,
               children:
                   tasksInSection
                       .map((taskData) => _buildTaskItem(context, taskData))
@@ -376,19 +422,22 @@ class _HomePageState extends State<HomePage> {
           height: 50,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+            color: filterBarBackgroundColor,
+            border: Border(bottom: BorderSide(color: filterBarBorderColor)),
           ),
           child: Row(
             children: [
               Expanded(
                 child:
                     categoriesStillLoading
-                        ? const Center(
+                        ? Center(
                           child: SizedBox(
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: theme.primaryColor,
+                            ),
                           ),
                         )
                         : ListView.separated(
@@ -405,23 +454,6 @@ class _HomePageState extends State<HomePage> {
                                   taskVM.selectedCategoryFilter == filterValue,
                               onSelected:
                                   (_) => taskVM.setCategoryFilter(filterValue),
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              labelStyle: TextStyle(
-                                fontSize: 13,
-                                color:
-                                    taskVM.selectedCategoryFilter == filterValue
-                                        ? Colors.white
-                                        : Colors.black87,
-                              ),
-                              selectedColor: Theme.of(context).primaryColor,
-                              backgroundColor: Colors.grey.shade200,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15),
-                              ),
                             );
                           },
                         ),
@@ -430,7 +462,7 @@ class _HomePageState extends State<HomePage> {
                 icon: const Icon(Icons.filter_list),
                 tooltip: "Lọc & Tùy chọn",
                 onPressed: _onFilterIconPressed,
-                color: Colors.grey[700],
+                color: filterIconColor,
                 splashRadius: 20,
               ),
             ],
@@ -444,6 +476,7 @@ class _HomePageState extends State<HomePage> {
   Widget _buildTaskItem(BuildContext context, TaskViewData taskData) {
     final taskViewModel = context.read<TaskViewModel>();
     final theme = Theme.of(context);
+    final bool isDarkMode = theme.brightness == Brightness.dark;
 
     final String title = taskData.title;
     final String subtitleText = taskData.displaySubtitle;
@@ -453,20 +486,44 @@ class _HomePageState extends State<HomePage> {
     final bool isOverdue = taskData.isOverdue;
     final IconData? sticker = taskData.sticker;
 
+    final Color? titleColor =
+        isDone
+            ? (isDarkMode
+                ? theme.textTheme.bodyLarge?.color?.withAlpha(128)
+                : Colors.grey[600])
+            : (isDarkMode ? theme.textTheme.bodyLarge?.color : Colors.black87);
+    final Color? subtitleColor =
+        isDarkMode
+            ? theme.textTheme.bodySmall?.color?.withAlpha(179)
+            : Colors.grey[600];
+    // ignore: unnecessary_nullable_for_final_variable_declarations
+    final Color? overdueColor =
+        isDarkMode ? theme.colorScheme.error : Colors.red.shade700;
+    final Color? timeColor =
+        isOverdue
+            ? overdueColor
+            : (isDarkMode
+                ? theme.textTheme.bodySmall?.color?.withAlpha(204)
+                : Colors.grey[700]);
+    final Color? popupIconColor =
+        isDarkMode ? theme.iconTheme.color?.withAlpha(153) : Colors.grey;
+    final Color itemDividerColor =
+        isDarkMode ? theme.dividerColor.withAlpha(128) : Colors.grey.shade200;
+
     return InkWell(
       onTap: () => _navigateToEditTask(context, taskData.originalTask),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 0),
         decoration: BoxDecoration(
           border: Border(
-            bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
+            bottom: BorderSide(color: itemDividerColor, width: 0.5),
           ),
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Padding(
-              padding: const EdgeInsets.only(top: 0.0, right: 8.0),
+              padding: const EdgeInsets.only(right: 8.0),
               child: SizedBox(
                 width: 24,
                 height: 24,
@@ -475,7 +532,6 @@ class _HomePageState extends State<HomePage> {
                   onChanged: (v) {
                     if (v != null) taskViewModel.toggleTaskDone(taskData.id);
                   },
-                  activeColor: theme.primaryColor,
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
@@ -500,7 +556,7 @@ class _HomePageState extends State<HomePage> {
                             decoration:
                                 isDone ? TextDecoration.lineThrough : null,
                             fontWeight: FontWeight.w500,
-                            color: isDone ? Colors.grey[600] : Colors.black87,
+                            color: titleColor,
                           ),
                         ),
                       ),
@@ -515,7 +571,7 @@ class _HomePageState extends State<HomePage> {
                       style: TextStyle(
                         fontSize: 13,
                         decoration: isDone ? TextDecoration.lineThrough : null,
-                        color: Colors.grey[600],
+                        color: subtitleColor,
                         height: 1.3,
                       ),
                     ),
@@ -537,10 +593,7 @@ class _HomePageState extends State<HomePage> {
                       Text(
                         trailingInfo,
                         style: TextStyle(
-                          color:
-                              isOverdue
-                                  ? Colors.red.shade700
-                                  : Colors.grey[700],
+                          color: timeColor,
                           fontSize: 12,
                           fontWeight:
                               isOverdue ? FontWeight.bold : FontWeight.normal,
@@ -549,11 +602,7 @@ class _HomePageState extends State<HomePage> {
                   ],
                 ),
                 PopupMenuButton<String>(
-                  icon: const Icon(
-                    Icons.more_vert,
-                    size: 20,
-                    color: Colors.grey,
-                  ),
+                  icon: Icon(Icons.more_vert, size: 20, color: popupIconColor),
                   tooltip: 'Tùy chọn khác',
                   iconSize: 20,
                   padding: const EdgeInsets.all(0),
@@ -567,18 +616,22 @@ class _HomePageState extends State<HomePage> {
                   },
                   itemBuilder:
                       (BuildContext context) => <PopupMenuEntry<String>>[
-                        const PopupMenuItem<String>(
+                        PopupMenuItem<String>(
                           value: 'edit',
                           height: 40,
                           child: Row(
                             children: [
-                              Icon(Icons.edit_outlined, size: 20),
-                              SizedBox(width: 8),
-                              Text('Sửa'),
+                              Icon(
+                                Icons.edit_outlined,
+                                size: 20,
+                                color: theme.iconTheme.color,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text('Sửa'),
                             ],
                           ),
                         ),
-                        const PopupMenuDivider(height: 1),
+                        const PopupMenuDivider(),
                         PopupMenuItem<String>(
                           value: 'delete',
                           height: 40,
@@ -587,12 +640,14 @@ class _HomePageState extends State<HomePage> {
                               Icon(
                                 Icons.delete_outline,
                                 size: 20,
-                                color: Colors.red.shade700,
+                                color: theme.colorScheme.error,
                               ),
-                              SizedBox(width: 8),
+                              const SizedBox(width: 8),
                               Text(
                                 'Xóa',
-                                style: TextStyle(color: Colors.red.shade700),
+                                style: TextStyle(
+                                  color: theme.colorScheme.error,
+                                ),
                               ),
                             ],
                           ),
@@ -613,11 +668,30 @@ class _TaskSearchDelegate extends SearchDelegate<Task?> {
   String? get searchFieldLabel => 'Tìm công việc...';
 
   @override
+  ThemeData appBarTheme(BuildContext context) {
+    final theme = Theme.of(context);
+    return theme.copyWith(
+      appBarTheme: theme.appBarTheme,
+      inputDecorationTheme: InputDecorationTheme(
+        hintStyle: TextStyle(color: theme.hintColor.withAlpha(153)),
+        border: InputBorder.none,
+      ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: theme.primaryColor,
+        // ignore: deprecated_member_use
+        selectionColor: theme.primaryColor.withOpacity(0.3),
+        selectionHandleColor: theme.primaryColor,
+      ),
+    );
+  }
+
+  @override
   List<Widget>? buildActions(BuildContext context) {
+    final theme = Theme.of(context);
     return [
       if (query.isNotEmpty)
         IconButton(
-          icon: const Icon(Icons.clear, color: Colors.grey),
+          icon: Icon(Icons.clear, color: theme.iconTheme.color?.withAlpha(179)),
           tooltip: 'Xóa tìm kiếm',
           onPressed: () {
             query = '';
@@ -629,8 +703,9 @@ class _TaskSearchDelegate extends SearchDelegate<Task?> {
 
   @override
   Widget? buildLeading(BuildContext context) {
+    final theme = Theme.of(context);
     return IconButton(
-      icon: const Icon(Icons.arrow_back),
+      icon: Icon(Icons.arrow_back, color: theme.appBarTheme.iconTheme?.color),
       tooltip: 'Quay lại',
       onPressed: () => close(context, null),
     );
@@ -638,31 +713,40 @@ class _TaskSearchDelegate extends SearchDelegate<Task?> {
 
   @override
   Widget buildResults(BuildContext context) {
+    final theme = Theme.of(context);
+    final bool isDarkMode = theme.brightness == Brightness.dark;
     final taskViewModel = context.read<TaskViewModel>();
     final List<TaskViewData> results = taskViewModel.searchTasks(query);
 
     if (results.isEmpty) {
-      return Center(child: Text('Không tìm thấy kết quả nào cho "$query".'));
+      return Center(
+        child: Text(
+          'Không tìm thấy kết quả nào cho "$query".',
+          style: TextStyle(color: theme.hintColor),
+        ),
+      );
     }
 
     return ListView.builder(
       itemCount: results.length,
       itemBuilder: (context, index) {
         final taskData = results[index];
+        final Color? tileColor =
+            taskData.isDone
+                ? (isDarkMode
+                    ? theme.disabledColor.withAlpha(26)
+                    : Colors.grey.shade100)
+                : null;
+
         return ListTile(
           leading: Icon(
             taskData.isDone ? Icons.check_box : Icons.check_box_outline_blank,
-            color:
-                taskData.isDone ? Colors.grey : Theme.of(context).primaryColor,
+            color: taskData.isDone ? theme.disabledColor : theme.primaryColor,
           ),
           title: Row(
             children: [
               if (taskData.sticker != null)
-                Icon(
-                  taskData.sticker,
-                  size: 18,
-                  color: Theme.of(context).primaryColor,
-                ),
+                Icon(taskData.sticker, size: 18, color: theme.primaryColor),
               if (taskData.sticker != null) const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -671,6 +755,7 @@ class _TaskSearchDelegate extends SearchDelegate<Task?> {
                   style: TextStyle(
                     decoration:
                         taskData.isDone ? TextDecoration.lineThrough : null,
+                    color: taskData.isDone ? theme.disabledColor : null,
                   ),
                 ),
               ),
@@ -680,11 +765,11 @@ class _TaskSearchDelegate extends SearchDelegate<Task?> {
             taskData.displaySubtitle,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 13, color: theme.hintColor),
           ),
           trailing: Icon(Icons.flag, color: taskData.priorityColor, size: 18),
           onTap: () => close(context, taskData.originalTask),
-          tileColor: taskData.isDone ? Colors.grey.shade100 : null,
+          tileColor: tileColor,
         );
       },
     );
@@ -692,17 +777,29 @@ class _TaskSearchDelegate extends SearchDelegate<Task?> {
 
   @override
   Widget buildSuggestions(BuildContext context) {
+    final theme = Theme.of(context);
+    final bool isDarkMode = theme.brightness == Brightness.dark;
     final taskViewModel = context.read<TaskViewModel>();
 
     if (query.trim().isEmpty) {
-      return const Center(child: Text('Nhập từ khóa để tìm kiếm...'));
+      return Center(
+        child: Text(
+          'Nhập từ khóa để tìm kiếm...',
+          style: TextStyle(color: theme.hintColor),
+        ),
+      );
     }
 
     final List<TaskViewData> suggestions =
         taskViewModel.searchTasks(query).take(10).toList();
 
     if (suggestions.isEmpty) {
-      return Center(child: Text('Không có gợi ý nào cho "$query".'));
+      return Center(
+        child: Text(
+          'Không có gợi ý nào cho "$query".',
+          style: TextStyle(color: theme.hintColor),
+        ),
+      );
     }
 
     return ListView.builder(
@@ -712,7 +809,10 @@ class _TaskSearchDelegate extends SearchDelegate<Task?> {
         return ListTile(
           leading: Icon(
             taskData.sticker ?? Icons.label_outline,
-            color: Colors.grey[600],
+            color:
+                isDarkMode
+                    ? theme.iconTheme.color?.withAlpha(179)
+                    : Colors.grey[600],
           ),
           title: Text(taskData.title),
           subtitle: Text(
@@ -724,6 +824,7 @@ class _TaskSearchDelegate extends SearchDelegate<Task?> {
                     ? '${taskData.originalTask.description.substring(0, 30)}...'
                     : taskData.originalTask.description),
             overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: theme.hintColor),
           ),
           onTap: () {
             close(context, taskData.originalTask);

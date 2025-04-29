@@ -31,7 +31,6 @@ class CategoryRepository implements ICategoryRepository {
         return sortedDefaults;
       }
     } catch (e) {
-      // <--- LỖI 1 (Line 34): Đã xóa print ---
       List<String> sortedDefaults = List.from(_defaultCategories)
         ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
       return sortedDefaults;
@@ -46,7 +45,6 @@ class CategoryRepository implements ICategoryRepository {
         ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
       await prefs.setStringList(_prefsKey, sortedCategories);
     } catch (e) {
-      // <--- LỖI 2 (Line 49): Đã xóa print ---
       throw Exception('Không thể lưu danh sách phân loại.');
     }
   }
