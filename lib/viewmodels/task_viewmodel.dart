@@ -5,13 +5,34 @@ import 'package:collection/collection.dart';
 import 'package:workmanagement/models/task_model.dart';
 import 'package:workmanagement/repositories/itask_repository.dart';
 import 'package:workmanagement/viewmodels/task_view_data.dart';
+import 'dart:io';
+
+class StorageService {
+  Future<String> uploadFile(String filePath, String taskId) async {
+    await Future.delayed(
+      Duration(milliseconds: 300 + File(filePath).lengthSync() % 500),
+    );
+    final fileName = filePath.split(Platform.pathSeparator).last;
+    final identifier = 'storage/$taskId/$fileName';
+    debugPrint('Uploaded $fileName -> $identifier');
+    return identifier;
+  }
+
+  Future<void> deleteFile(String identifier) async {
+    await Future.delayed(const Duration(milliseconds: 100));
+    debugPrint('Deleted file: $identifier (giả lập)');
+  }
+}
 
 class TaskViewModel with ChangeNotifier {
   final ITaskRepository _repository;
   final _uuid = const Uuid();
+  final StorageService _storageService = StorageService();
+
   List<Task> _tasks = [];
   bool _isLoading = false;
-  String? _error;
+  Object? _errorObject;
+  StackTrace? _errorStackTrace;
   String? _selectedCategoryFilter;
   bool _showCompleted = true;
 
@@ -20,7 +41,16 @@ class TaskViewModel with ChangeNotifier {
   }
 
   bool get isLoading => _isLoading;
-  String? get error => _error;
+  String? get error =>
+      _errorObject == null
+          ? null
+          : (_errorObject is Exception
+              ? _errorObject.toString().replaceFirst("Exception: ", "")
+              : _errorObject.toString());
+  String? get errorDetails =>
+      _errorObject == null
+          ? null
+          : 'Error: $_errorObject\nStackTrace:\n$_errorStackTrace';
   String? get selectedCategoryFilter => _selectedCategoryFilter;
   bool get showCompleted => _showCompleted;
   List<Task> get allRawTasks => UnmodifiableListView(_tasks);
@@ -158,10 +188,7 @@ class TaskViewModel with ChangeNotifier {
   }
 
   TaskViewData _createTaskViewData(Task task, DateTime todayStart) {
-    final dateFormat = DateFormat(
-      'dd/MM/yyyy',
-      'vi_VN',
-    ); // Lỗi LocaleDataException xảy ra nếu chưa initialize
+    final dateFormat = DateFormat('dd/MM/yyyy', 'vi_VN');
     String formattedDueDate = '';
     String formattedDueTime = '';
     List<String> subtitleParts = [];
@@ -215,15 +242,27 @@ class TaskViewModel with ChangeNotifier {
     );
   }
 
+  Future<String> _uploadFileAndGetIdentifier(
+    String filePath,
+    String taskId,
+  ) async {
+    return await _storageService.uploadFile(filePath, taskId);
+  }
+
+  Future<void> _deleteFile(String identifier) async {
+    await _storageService.deleteFile(identifier);
+  }
+
   Future<void> loadTasks() async {
     if (_isLoading) return;
     _setLoading(true);
-    _error = null;
+    _errorObject = null;
+    _errorStackTrace = null;
     try {
       _tasks = await _repository.getAllTasks();
       debugPrint("Tải thành công ${_tasks.length} công việc.");
     } catch (e, s) {
-      _setError("Lỗi tải công việc: $e", s);
+      _setError(e, s);
     } finally {
       _setLoading(false);
     }
@@ -235,14 +274,46 @@ class TaskViewModel with ChangeNotifier {
       return;
     }
     _setLoading(true);
-    _error = null;
+    _errorObject = null;
+    _errorStackTrace = null;
+    List<String> uploadedAttachmentIdentifiers = [];
+    Task taskToSave = task;
+
     try {
-      final taskToAdd = task.id.isEmpty ? task.copyWith(id: _uuid.v4()) : task;
-      final addedTask = await _repository.addTask(taskToAdd);
+      final List<String> localFilePaths = List.from(task.attachments);
+      taskToSave = task.copyWith(attachments: []);
+      final taskId = taskToSave.id.isEmpty ? _uuid.v4() : taskToSave.id;
+
+      if (localFilePaths.isNotEmpty) {
+        debugPrint(
+          "Bắt đầu upload ${localFilePaths.length} tệp cho task $taskId...",
+        );
+        for (String path in localFilePaths) {
+          try {
+            final identifier = await _uploadFileAndGetIdentifier(path, taskId);
+            uploadedAttachmentIdentifiers.add(identifier);
+          } catch (e) {
+            debugPrint("Lỗi upload file $path: $e. Bỏ qua file này.");
+          }
+        }
+        debugPrint(
+          "Đã upload xong ${uploadedAttachmentIdentifiers.length} tệp.",
+        );
+      }
+
+      taskToSave = taskToSave.copyWith(
+        attachments: uploadedAttachmentIdentifiers,
+      );
+
+      final addedTask = await _repository.addTask(taskToSave);
       _tasks.insert(0, addedTask);
-      debugPrint("Thêm thành công task: ${addedTask.title}");
+
+      debugPrint(
+        "Thêm thành công task: ${taskToSave.title} với ${uploadedAttachmentIdentifiers.length} đính kèm.",
+      );
     } catch (e, s) {
-      _setError("Lỗi thêm công việc: $e", s);
+      _setError(e, s);
+      debugPrint("Lỗi lưu task, cần xem xét xóa file đã upload nếu có.");
     } finally {
       _setLoading(false);
     }
@@ -253,7 +324,8 @@ class TaskViewModel with ChangeNotifier {
       debugPrint("ViewModel đang bận, bỏ qua updateTask");
       return;
     }
-    _error = null;
+    _errorObject = null;
+    _errorStackTrace = null;
 
     Task? originalTask;
     final index = _tasks.indexWhere((t) => t.id == task.id);
@@ -262,24 +334,89 @@ class TaskViewModel with ChangeNotifier {
       _setError("Lỗi: Không tìm thấy task để cập nhật.", null);
       return;
     }
-
     originalTask = _tasks[index];
+
+    final List<String> existingIdentifiers = List.from(
+      originalTask.attachments,
+    );
+    final List<String> finalIdentifiersFromView = List.from(task.attachments);
+    final List<String> newLocalFilePaths =
+        finalIdentifiersFromView
+            .where(
+              (path) =>
+                  !existingIdentifiers.contains(path) &&
+                  File(path).existsSync(),
+            )
+            .toList();
+    final List<String> identifiersToKeep =
+        finalIdentifiersFromView
+            .where((id) => existingIdentifiers.contains(id))
+            .toList();
+    final List<String> identifiersToDelete =
+        existingIdentifiers
+            .where((id) => !identifiersToKeep.contains(id))
+            .toList();
+
+    List<String> uploadedNewIdentifiers = [];
+    Task taskToSave = task;
 
     _tasks[index] = task;
     notifyListeners();
 
     try {
-      await _repository.updateTask(task);
-      debugPrint("Cập nhật thành công task: ${task.title}");
+      if (newLocalFilePaths.isNotEmpty) {
+        debugPrint(
+          "Bắt đầu upload ${newLocalFilePaths.length} tệp mới cho task ${task.id}...",
+        );
+        for (String path in newLocalFilePaths) {
+          try {
+            final identifier = await _uploadFileAndGetIdentifier(path, task.id);
+            uploadedNewIdentifiers.add(identifier);
+          } catch (e) {
+            debugPrint("Lỗi upload file mới $path: $e. Bỏ qua file này.");
+          }
+        }
+        debugPrint("Đã upload xong ${uploadedNewIdentifiers.length} tệp mới.");
+      }
+
+      if (identifiersToDelete.isNotEmpty) {
+        debugPrint(
+          "Bắt đầu xóa ${identifiersToDelete.length} tệp cũ cho task ${task.id}...",
+        );
+        for (String identifier in identifiersToDelete) {
+          try {
+            await _deleteFile(identifier);
+          } catch (e) {
+            debugPrint("Lỗi xóa file $identifier: $e. Bỏ qua.");
+          }
+        }
+        debugPrint("Đã xử lý xóa ${identifiersToDelete.length} tệp cũ.");
+      }
+
+      final List<String> finalAttachmentsForDB = [
+        ...identifiersToKeep,
+        ...uploadedNewIdentifiers,
+      ];
+      taskToSave = task.copyWith(attachments: finalAttachmentsForDB);
+
+      await _repository.updateTask(taskToSave);
+
+      _tasks[index] = taskToSave;
+      notifyListeners();
+      debugPrint(
+        "Cập nhật thành công task: ${taskToSave.title} với ${finalAttachmentsForDB.length} đính kèm.",
+      );
     } catch (e, s) {
-      // --- SỬA LỖI Ở ĐÂY: Xóa dấu ! ---
-      _tasks[index] = originalTask;
-      // -----------------------------
+      _tasks[index] = originalTask; // Rollback lại task gốc nếu có lỗi
       _setError("Lỗi cập nhật công việc: $e", s);
       notifyListeners();
+      debugPrint(
+        "Lỗi update task, cần xem xét rollback file upload/delete nếu có.",
+      );
     }
   }
 
+  // --- HÀM DELETE TASK ĐÃ CẬP NHẬT ---
   Future<void> deleteTask(String taskId) async {
     if (_isLoading) {
       debugPrint("ViewModel đang bận, bỏ qua deleteTask");
@@ -292,18 +429,44 @@ class TaskViewModel with ChangeNotifier {
     }
 
     final taskToDelete = _tasks[index];
+    List<String> attachmentsToDelete = List.from(taskToDelete.attachments);
+
+    // Optimistic Update
     _tasks.removeAt(index);
     notifyListeners();
 
     try {
+      // Xóa Task chính từ Repository
       await _repository.deleteTask(taskId);
-      debugPrint("Xóa thành công task ID: $taskId");
+      debugPrint("Xóa thành công task ID: $taskId từ repository.");
+
+      // Nếu xóa task chính thành công, tiến hành xóa attachments
+      if (attachmentsToDelete.isNotEmpty) {
+        debugPrint(
+          "Bắt đầu xóa ${attachmentsToDelete.length} file đính kèm cho task $taskId...",
+        );
+        for (String identifier in attachmentsToDelete) {
+          try {
+            await _deleteFile(identifier);
+            debugPrint("Đã xóa file: $identifier");
+          } catch (fileError, fileStack) {
+            // Chỉ ghi log, không dừng lại hoặc báo lỗi nghiêm trọng
+            debugPrint(
+              "Lỗi xóa file đính kèm $identifier: $fileError\n$fileStack",
+            );
+          }
+        }
+        debugPrint("Đã xử lý xong việc xóa file đính kèm.");
+      }
     } catch (e, s) {
+      // Rollback state nếu xóa Task chính thất bại
       _tasks.insert(index, taskToDelete);
       _setError("Lỗi xóa công việc: $e", s);
       notifyListeners();
+      // Không xóa attachments nếu xóa task chính thất bại
     }
   }
+  // --- KẾT THÚC HÀM DELETE TASK ĐÃ CẬP NHẬT ---
 
   Future<void> toggleTaskDone(String taskId) async {
     final index = _tasks.indexWhere((t) => t.id == taskId);
@@ -332,7 +495,8 @@ class TaskViewModel with ChangeNotifier {
       debugPrint("ViewModel đang bận, bỏ qua handleCategoryDeleted");
       return;
     }
-    _error = null;
+    _errorObject = null;
+    _errorStackTrace = null;
     List<Task> originalTasksState = List.from(_tasks);
     String? originalFilter = _selectedCategoryFilter;
     bool stateChanged = false;
@@ -417,16 +581,13 @@ class TaskViewModel with ChangeNotifier {
     }
   }
 
-  void _setError(String? message, StackTrace? stackTrace) {
-    if (_error != message) {
-      _error = message;
-      if (message != null) {
-        debugPrint("ViewModel Error: $message");
-        if (stackTrace != null) {
-          debugPrint("$stackTrace");
-        }
-      }
-      notifyListeners();
+  void _setError(Object error, StackTrace? stackTrace) {
+    _errorObject = error;
+    _errorStackTrace = stackTrace;
+    debugPrint("ViewModel Error: $error");
+    if (stackTrace != null) {
+      debugPrint("$stackTrace");
     }
+    notifyListeners();
   }
 }

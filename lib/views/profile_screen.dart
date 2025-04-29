@@ -52,9 +52,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               end: todayStart.add(const Duration(days: 1)),
             );
       case TimeRange.allTime:
-        final tenYearsAgo = DateTime(now.year - 10, 1, 1);
-        final endOfThisYear = DateTime(now.year + 1, 1, 1);
-        return DateTimeRange(start: tenYearsAgo, end: endOfThisYear);
+        // Mặc định lấy từ đầu năm trước đến cuối năm nay cho "All Time"
+        final start = DateTime(now.year - 1, 1, 1);
+        final end = DateTime(now.year + 1, 1, 1);
+        return DateTimeRange(start: start, end: end);
     }
   }
 
@@ -82,6 +83,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               primary: Theme.of(context).primaryColor,
               onPrimary: Colors.white,
             ),
+            // Tùy chỉnh thêm giao diện DatePicker nếu muốn
+            datePickerTheme: DatePickerThemeData(
+              headerBackgroundColor: Theme.of(context).primaryColor,
+              headerForegroundColor: Colors.white,
+              // Các tùy chỉnh khác...
+            ),
           ),
           child: child!,
         );
@@ -93,6 +100,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (picked != null) {
       setState(() {
         _selectedTimeRange = TimeRange.custom;
+        // Đảm bảo end date bao gồm cả ngày cuối cùng được chọn
         _customDateRange = DateTimeRange(
           start: DateTime(
             picked.start.year,
@@ -106,34 +114,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
             23,
             59,
             59,
-            999,
+            999, // Bao gồm cả ngày cuối
           ),
         );
       });
     }
   }
 
+  // Lọc dựa trên ngày *hoàn thành* (completedAt) nếu task đã xong,
+  // hoặc ngày *tạo* (createdAt) nếu chưa xong và nằm trong khoảng thời gian
   List<Task> _filterTasksByDate(List<Task> allTasks, DateTimeRange range) {
     final start = range.start;
+    // Thêm microsecond để đảm bảo so sánh `isBefore` hoạt động đúng vào cuối ngày
     final end = range.end.add(const Duration(microseconds: 1));
 
-    return allTasks
-        .where(
-          (task) =>
-              !task.createdAt.isBefore(start) && task.createdAt.isBefore(end),
-        )
-        .toList();
+    return allTasks.where((task) {
+      // Ưu tiên ngày hoàn thành nếu có
+      final relevantDate = task.completedAt ?? task.createdAt;
+      // Kiểm tra xem ngày liên quan có nằm trong khoảng không
+      return !relevantDate.isBefore(start) && relevantDate.isBefore(end);
+    }).toList();
   }
 
   double _calculateNiceInterval(double maxVal) {
     if (maxVal <= 1) return 1.0;
     if (maxVal <= 5) return 1.0;
     if (maxVal <= 10) return 2.0;
+    if (maxVal <= 20) return 5.0; // Thêm bước nhảy
+    if (maxVal <= 50) return 10.0; // Thêm bước nhảy
 
-    double roughInterval = maxVal / 4.0;
+    // Tính toán khoảng cách "đẹp" dựa trên bậc 10
+    double roughInterval = maxVal / 4.0; // Chia thành khoảng 4-5 mức
     double magnitude = pow(10, (log(roughInterval) / ln10).floor()).toDouble();
     double residual = roughInterval / magnitude;
 
+    // Chọn các giá trị đẹp (1, 2, 5, 10) * bậc 10
     if (residual > 5) return 10 * magnitude;
     if (residual > 2) return 5 * magnitude;
     if (residual > 1) return 2 * magnitude;
@@ -148,51 +163,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final theme = Theme.of(context);
 
     final dateTimeRange = _getDateTimeRange(_selectedTimeRange);
+    // Lọc task dựa trên khoảng thời gian đã chọn
     final filteredTasks = _filterTasksByDate(allTasks, dateTimeRange);
 
     int completedCount = 0;
-    int uncompletedCount = 0;
+    int uncompletedCount =
+        0; // Số task *chưa hoàn thành* trong khoảng thời gian
     Map<String, int> categoryCounts = {};
     List<String> categoriesFromVM = categoryViewModel.categories;
 
+    // Khởi tạo category counts
     for (var cat in categoriesFromVM) {
       categoryCounts[cat] = 0;
     }
     categoryCounts['Chưa phân loại'] = 0;
 
+    // Đếm task đã lọc
     for (var task in filteredTasks) {
       if (task.isDone) {
         completedCount++;
       } else {
+        // Task chưa xong *trong khoảng thời gian lọc*
         uncompletedCount++;
       }
+      // Tính category cho tất cả task trong khoảng thời gian
       final category =
           (task.category?.isNotEmpty ?? false) &&
                   categoriesFromVM.contains(task.category)
               ? task.category!
               : 'Chưa phân loại';
-      if (categoryCounts.containsKey(category)) {
-        categoryCounts[category] = categoryCounts[category]! + 1;
-      }
+      // Đảm bảo category tồn tại trong map trước khi tăng
+      categoryCounts.update(category, (value) => value + 1, ifAbsent: () => 1);
     }
 
+    // Xóa các category không có task nào (trừ "Chưa phân loại")
     categoryCounts.removeWhere(
       (key, value) => value == 0 && key != 'Chưa phân loại',
     );
+    // Nếu "Chưa phân loại" = 0 và có các category khác, thì cũng xóa nó đi
     if (categoryCounts['Chưa phân loại'] == 0 && categoryCounts.length > 1) {
       categoryCounts.remove('Chưa phân loại');
     }
 
-    final totalCount = filteredTasks.length;
-    double completedPercent = 0;
+    final totalCountInPeriod =
+        filteredTasks.length; // Tổng số task trong khoảng thời gian đã chọn
+    double completedPercent = 0.0;
     double uncompletedPercent = 0.0;
 
-    if (totalCount > 0) {
-      completedPercent = (completedCount / totalCount) * 100;
+    if (totalCountInPeriod > 0) {
+      completedPercent = (completedCount / totalCountInPeriod) * 100;
+      // Tính phần trăm chưa hoàn thành dựa trên tổng số task *trong kỳ*
       uncompletedPercent = 100.0 - completedPercent;
     } else {
-      uncompletedPercent = 0.0;
+      // Nếu không có task nào trong kỳ, cả hai là 0
       completedPercent = 0.0;
+      uncompletedPercent = 0.0;
     }
 
     final Color completedColor = Colors.green.shade500;
@@ -202,19 +227,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final Color categoryColor2 = Colors.blue.shade300;
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      // <-- ĐÃ XÓA backgroundColor ở đây
       appBar: AppBar(
         title: const Text('Tổng Quan Công Việc'),
         centerTitle: true,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 1,
-        iconTheme: const IconThemeData(color: Colors.black54),
-        titleTextStyle: const TextStyle(
-          color: Colors.black87,
-          fontSize: 20,
-          fontWeight: FontWeight.w500,
-        ),
+        backgroundColor:
+            theme.appBarTheme.backgroundColor, // Sử dụng màu từ theme
+        foregroundColor: theme.appBarTheme.foregroundColor,
+        elevation: theme.appBarTheme.elevation,
+        iconTheme: theme.appBarTheme.iconTheme, // Màu icon back nếu có
+        titleTextStyle: theme.appBarTheme.titleTextStyle,
       ),
       body: RefreshIndicator(
         onRefresh:
@@ -242,11 +264,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             const SizedBox(height: 16),
+            // Hiển thị thống kê dựa trên filteredTasks
             _buildOverviewCard(
               theme,
               completedCount,
-              uncompletedCount,
-              totalCount,
+              uncompletedCount, // Task chưa hoàn thành trong kỳ
+              totalCountInPeriod, // Tổng task trong kỳ
               completedColor,
               pendingColor,
               totalTasksColor,
@@ -254,15 +277,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 20),
             _buildChartsCard(
               theme,
-              totalCount,
+              totalCountInPeriod, // Dùng tổng trong kỳ
               completedCount,
-              uncompletedCount,
+              uncompletedCount, // Dùng số chưa hoàn thành trong kỳ
               completedPercent,
               uncompletedPercent,
               completedColor,
               pendingColor,
             ),
             const SizedBox(height: 20),
+            // Biểu đồ category dựa trên filteredTasks
             _buildCategoryStatsCard(
               theme,
               categoryCounts,
@@ -317,7 +341,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
 
       return ChoiceChip(
-        key: ValueKey(range),
+        key: ValueKey(range), // Key để Flutter biết khi nào cần rebuild
         label: Text(
           text,
           overflow: TextOverflow.ellipsis,
@@ -326,15 +350,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
         selected: isSelected,
         onSelected: (selected) {
           if (range == TimeRange.custom) {
-            _selectCustomDateRange(context);
+            _selectCustomDateRange(context); // Mở DatePicker
           } else if (selected) {
+            // Chỉ cập nhật state nếu chip được chọn và không phải là custom
             setState(() {
               _selectedTimeRange = range;
-              _customDateRange = null;
+              _customDateRange = null; // Reset custom range khi chọn cái khác
             });
           }
         },
-        selectedColor: theme.primaryColor.withAlpha(40),
+        selectedColor: theme.primaryColor.withAlpha(40), // Màu nền khi chọn
         labelStyle: TextStyle(
           fontSize: 12,
           color: isSelected ? theme.primaryColor : Colors.grey[800],
@@ -349,8 +374,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           width: 1,
         ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        showCheckmark: false,
-        visualDensity: VisualDensity.compact,
+        showCheckmark: false, // Không hiển thị dấu tick
+        visualDensity: VisualDensity.compact, // Làm cho chip nhỏ gọn hơn
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         padding: EdgeInsets.symmetric(
           horizontal: chipPaddingHorizontal,
@@ -359,6 +384,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
+    // Hàm tạo một hàng các Chip
     Widget buildChipRow(List<TimeRange> ranges) {
       return Row(
         children:
@@ -373,14 +399,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
+    // Container chứa các chip
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.white, // Nền trắng cho card chứa chip
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
+          // Thêm bóng đổ nhẹ
           BoxShadow(
-            color: Colors.black.withAlpha(13),
+            color: Colors.black.withAlpha(13), // Màu bóng đổ
             spreadRadius: 1,
             blurRadius: 5,
             offset: const Offset(0, 2),
@@ -388,16 +416,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: MainAxisSize.min, // Chỉ chiếm chiều cao cần thiết
         children: [
           buildChipRow(rangesRow1),
-          SizedBox(height: chipSpacing),
+          SizedBox(height: chipSpacing), // Khoảng cách giữa 2 hàng
           buildChipRow(rangesRow2),
         ],
       ),
     );
   }
 
+  // Widget hiển thị một mục thống kê (icon, giá trị, nhãn)
   Widget _buildStatItem(
     ThemeData theme,
     IconData icon,
@@ -410,7 +439,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       children: [
         CircleAvatar(
           radius: 24,
-          backgroundColor: color.withAlpha(38),
+          backgroundColor: color.withAlpha(38), // Màu nền nhẹ cho avatar
           child: Icon(icon, size: 24, color: color),
         ),
         const SizedBox(height: 8),
@@ -418,7 +447,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           value,
           style: theme.textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.bold,
-            color: theme.textTheme.bodyLarge?.color,
+            color: theme.textTheme.bodyLarge?.color, // Màu chữ từ theme
           ),
         ),
         const SizedBox(height: 2),
@@ -430,6 +459,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // Card hiển thị tổng quan số lượng task
   Widget _buildOverviewCard(
     ThemeData theme,
     int completed,
@@ -440,14 +470,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Color totalColor,
   ) {
     return Card(
-      elevation: 1,
-      margin: EdgeInsets.zero,
+      elevation: 1, // Độ nổi của card
+      margin: EdgeInsets.zero, // Không có margin ngoài
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: Colors.white,
+      color: Colors.white, // Nền trắng cho card
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 12.0),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          mainAxisAlignment:
+              MainAxisAlignment.spaceAround, // Phân bố đều các item
           children: [
             _buildStatItem(
               theme,
@@ -476,15 +507,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // Hàm tạo dữ liệu cho một cột trong BarChart
   BarChartGroupData _makeBarGroupData(int x, double y, Color color) {
     return BarChartGroupData(
-      x: x,
+      x: x, // Vị trí trên trục X
       barRods: [
         BarChartRodData(
-          toY: y,
-          color: color,
-          width: 20,
+          toY: y, // Giá trị trên trục Y
+          color: color, // Màu của cột
+          width: 20, // Độ rộng của cột
           borderRadius: const BorderRadius.only(
+            // Bo góc trên của cột
             topLeft: Radius.circular(4),
             topRight: Radius.circular(4),
           ),
@@ -493,6 +526,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // Hàm tạo widget cho tiêu đề trục X của BarChart
   Widget _getBarTitles(double value, TitleMeta meta) {
     final style = TextStyle(color: Colors.grey[600], fontSize: 11);
     String text;
@@ -507,13 +541,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         text = '';
         break;
     }
-    return SideTitleWidget(
-      axisSide: meta.axisSide,
-      space: 4.0,
+    return Padding(
+      padding: const EdgeInsets.only(top: 4.0),
       child: Text(text, style: style),
     );
   }
 
+  // Card chứa biểu đồ cột và tròn
   Widget _buildChartsCard(
     ThemeData theme,
     int totalCount,
@@ -524,11 +558,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Color completedColor,
     Color pendingColor,
   ) {
+    // Nếu không có task nào trong kỳ, hiển thị thông báo
     if (totalCount <= 0) {
       return _buildEmptyStateCard(
         theme,
-        "Chưa có công việc nào để vẽ biểu đồ.",
-        height: 240,
+        "Chưa có công việc nào trong khoảng thời gian này để vẽ biểu đồ.",
+        height: 240, // Chiều cao phù hợp cho card trống
       );
     }
 
@@ -540,15 +575,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: LayoutBuilder(
+          // Sử dụng LayoutBuilder để bố cục tùy theo chiều rộng
           builder: (context, constraints) {
-            const double breakpoint = 450.0;
-            bool useRow = constraints.maxWidth >= breakpoint;
+            const double breakpoint = 450.0; // Ngưỡng chuyển đổi layout
+            bool useRow =
+                constraints.maxWidth >= breakpoint; // Dùng Row nếu đủ rộng
 
             return useRow
                 ? Row(
+                  // Layout hàng ngang cho màn hình rộng
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
+                      // Biểu đồ cột chiếm nhiều không gian hơn
                       flex: 3,
                       child: _buildBarChart(
                         theme,
@@ -558,8 +597,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         pendingColor,
                       ),
                     ),
-                    const SizedBox(width: 32),
+                    const SizedBox(width: 32), // Khoảng cách giữa 2 biểu đồ
                     Expanded(
+                      // Biểu đồ tròn
                       flex: 2,
                       child: _buildPieChart(
                         theme,
@@ -572,6 +612,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 )
                 : Column(
+                  // Layout cột dọc cho màn hình hẹp
                   children: [
                     _buildBarChart(
                       theme,
@@ -580,7 +621,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       completedColor,
                       pendingColor,
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 24), // Khoảng cách giữa 2 biểu đồ
                     _buildPieChart(
                       theme,
                       completedPercent,
@@ -596,6 +637,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // Widget biểu đồ cột
   Widget _buildBarChart(
     ThemeData theme,
     int completed,
@@ -607,11 +649,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _makeBarGroupData(0, completed.toDouble(), completedColor),
       _makeBarGroupData(1, uncompleted.toDouble(), pendingColor),
     ];
-    final maxYValue = max(completed, uncompleted).toDouble();
+    final maxYValue =
+        max(completed, uncompleted).toDouble(); // Giá trị lớn nhất
+    // Tính khoảng chia trục Y "đẹp" và giá trị max "đẹp"
     final double interval = max(1.0, _calculateNiceInterval(maxYValue));
     final double niceMaxY =
         (maxYValue <= 0) ? interval : (maxYValue / interval).ceil() * interval;
-    final double maxY = max(5.0, max(interval, niceMaxY));
+    // Đảm bảo trục Y có giá trị tối thiểu để hiển thị lưới
+    final double maxY = max(
+      5.0,
+      max(interval, niceMaxY),
+    ); // Giá trị max cho trục Y
     final titleStyle = theme.textTheme.titleSmall?.copyWith(
       fontWeight: FontWeight.w600,
     );
@@ -627,12 +675,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: 190,
+          height: 190, // Chiều cao cố định cho biểu đồ
           child: BarChart(
             BarChartData(
-              alignment: BarChartAlignment.spaceAround,
-              maxY: maxY,
+              alignment: BarChartAlignment.spaceAround, // Căn chỉnh các cột
+              maxY: maxY, // Giá trị lớn nhất trục Y
               barTouchData: BarTouchData(
+                // Cấu hình tooltip khi chạm vào cột
                 enabled: true,
                 touchTooltipData: BarTouchTooltipData(
                   tooltipRoundedRadius: 8,
@@ -650,9 +699,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       children: <TextSpan>[
                         TextSpan(
-                          text: rod.toY.toInt().toString(),
+                          text: rod.toY.toInt().toString(), // Giá trị của cột
                           style: TextStyle(
-                            color: rod.color,
+                            color: rod.color, // Màu chữ trùng màu cột
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),
@@ -663,35 +712,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               titlesData: FlTitlesData(
+                // Cấu hình tiêu đề các trục
                 show: true,
                 bottomTitles: AxisTitles(
+                  // Trục X (dưới)
                   sideTitles: SideTitles(
                     showTitles: true,
-                    getTitlesWidget: _getBarTitles,
-                    reservedSize: 22,
+                    getTitlesWidget: _getBarTitles, // Hàm lấy widget tiêu đề
+                    reservedSize: 22, // Khoảng trống cho tiêu đề trục X
                   ),
                 ),
                 leftTitles: AxisTitles(
+                  // Trục Y (trái)
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 32,
-                    interval: interval,
-                    getTitlesWidget: (value, meta) {
+                    reservedSize: 32, // Khoảng trống cho tiêu đề trục Y
+                    interval: interval, // Khoảng chia trục Y
+                    getTitlesWidget: (double value, TitleMeta meta) {
+                      // Chỉ hiển thị giá trị tại các khoảng chia và không hiển thị số 0 nếu không cần thiết
                       if (value == 0 || value % interval != 0) {
-                        return Container();
+                        if (value == meta.max && maxY > 0) {
+                          // Vẫn hiển thị max nếu nó không chia hết
+                        } else {
+                          return Container(); // Không hiển thị
+                        }
                       }
+                      // Giảm sự lộn xộn khi maxY nhỏ
                       if (value == 0 && maxY <= interval * 1.5) {
                         return Container();
                       }
+
                       return Padding(
-                        padding: const EdgeInsets.only(left: 4.0),
+                        padding: const EdgeInsets.only(right: 4.0),
                         child: Text(
                           value.toInt().toString(),
                           style: const TextStyle(
                             fontSize: 10,
                             color: Colors.grey,
                           ),
-                          textAlign: TextAlign.left,
+                          textAlign: TextAlign.right,
                         ),
                       );
                     },
@@ -699,30 +758,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 topTitles: const AxisTitles(
                   sideTitles: SideTitles(showTitles: false),
-                ),
+                ), // Ẩn trục trên
                 rightTitles: const AxisTitles(
                   sideTitles: SideTitles(showTitles: false),
-                ),
+                ), // Ẩn trục phải
               ),
-              borderData: FlBorderData(show: false),
+              borderData: FlBorderData(
+                show: false,
+              ), // Không hiển thị đường viền
               gridData: FlGridData(
+                // Hiển thị lưới ngang
                 show: true,
-                drawVerticalLine: false,
-                horizontalInterval: interval,
+                drawVerticalLine: false, // Không vẽ lưới dọc
+                horizontalInterval: interval, // Khoảng cách lưới ngang
                 getDrawingHorizontalLine:
                     (value) =>
                         FlLine(color: Colors.grey.shade200, strokeWidth: 1),
               ),
-              barGroups: barGroups,
+              barGroups: barGroups, // Dữ liệu các cột
             ),
-            swapAnimationDuration: const Duration(milliseconds: 250),
-            swapAnimationCurve: Curves.linear,
+            duration: const Duration(milliseconds: 250), // Animation duration
+            curve: Curves.linear, // Animation curve
           ),
         ),
       ],
     );
   }
 
+  // Widget biểu đồ tròn
   Widget _buildPieChart(
     ThemeData theme,
     double completedPercent,
@@ -730,6 +793,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Color completedColor,
     Color pendingColor,
   ) {
+    // Chỉ hiển thị nếu tỷ lệ > 0.1% để tránh lỗi render khi quá nhỏ
     bool showCompleted = completedPercent > 0.1;
     bool showPending = uncompletedPercent > 0.1;
     List<PieChartSectionData> sections = [];
@@ -739,9 +803,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         PieChartSectionData(
           color: completedColor,
           value: completedPercent,
-          title: '${completedPercent.toStringAsFixed(0)}%',
-          radius: 50,
-          titlePositionPercentageOffset: 0.6,
+          title: '${completedPercent.toStringAsFixed(0)}%', // Hiển thị %
+          radius: 50, // Bán kính phần trăm
+          titlePositionPercentageOffset: 0.6, // Vị trí text %
           titleStyle: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.bold,
@@ -768,12 +832,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
     }
+    // Nếu không có dữ liệu, hiển thị một hình tròn màu xám
     if (sections.isEmpty) {
       sections.add(
         PieChartSectionData(
           color: Colors.grey.shade300,
           value: 100,
-          title: '',
+          title: '', // Không có text
           radius: 50,
         ),
       );
@@ -794,31 +859,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: 190,
+          height: 190, // Chiều cao cố định
           child: Column(
             children: [
               Expanded(
+                // Biểu đồ tròn chiếm phần lớn không gian
                 child: PieChart(
                   PieChartData(
-                    sectionsSpace: 2,
-                    centerSpaceRadius: 30,
-                    startDegreeOffset: -90,
-                    sections: sections,
+                    sectionsSpace: 2, // Khoảng cách giữa các phần
+                    centerSpaceRadius: 30, // Bán kính lỗ ở giữa
+                    startDegreeOffset: -90, // Bắt đầu từ trên cùng
+                    sections: sections, // Dữ liệu các phần
                     pieTouchData: PieTouchData(
+                      // Tắt tương tác chạm
                       touchCallback: (FlTouchEvent event, pieTouchResponse) {},
                     ),
                   ),
-                  swapAnimationDuration: const Duration(milliseconds: 250),
-                  swapAnimationCurve: Curves.linear,
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.linear,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 16), // Khoảng cách tới chú thích
               Row(
+                // Chú thích (Legend)
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (showCompleted) _buildLegend(completedColor, 'Hoàn thành'),
-                  if (showCompleted && showPending) const SizedBox(width: 16),
+                  if (showCompleted && showPending)
+                    const SizedBox(width: 16), // Khoảng cách giữa 2 chú thích
                   if (showPending) _buildLegend(pendingColor, 'Chưa xong'),
+                  // Nếu không có dữ liệu nào hiển thị
                   if (!showCompleted && !showPending)
                     _buildLegend(Colors.grey.shade400, 'Chưa có dữ liệu'),
                 ],
@@ -830,6 +900,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // Widget tạo một mục chú thích cho biểu đồ tròn
   Widget _buildLegend(Color color, String text) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2.0),
@@ -837,6 +908,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
+            // Chấm màu
             width: 10,
             height: 10,
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
@@ -851,26 +923,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // Card hiển thị thống kê theo từng category
   Widget _buildCategoryStatsCard(
     ThemeData theme,
     Map<String, int> categoryCounts,
     Color color1,
     Color color2,
   ) {
+    // Sắp xếp category theo số lượng giảm dần
     final sortedCategories =
         categoryCounts.entries.toList()
           ..sort((a, b) => b.value.compareTo(a.value));
+
+    // Danh sách màu sắc cho các category
     final List<Color> categoryColors = [
-      color1,
-      color2,
-      Colors.teal.shade300,
-      Colors.purple.shade300,
-      Colors.red.shade300,
-      Colors.indigo.shade300,
-      Colors.amber.shade400,
-      Colors.deepOrange.shade300,
-      Colors.pink.shade200,
-      Colors.lime.shade400,
+      color1, color2,
+      Colors.teal.shade300, Colors.purple.shade300, Colors.red.shade300,
+      Colors.indigo.shade300, Colors.amber.shade400, Colors.deepOrange.shade300,
+      Colors.pink.shade200, Colors.lime.shade400,
+      // Thêm màu nếu cần
     ];
 
     return Card(
@@ -881,7 +952,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center, // Canh giữa tiêu đề
           children: [
             Text(
               'Theo phân loại',
@@ -890,37 +961,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            if (sortedCategories.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24.0),
+            // Nếu không có category nào (hoặc chỉ có "Chưa phân loại" với 0 task)
+            if (sortedCategories.isEmpty ||
+                (sortedCategories.length == 1 &&
+                    sortedCategories.first.key == 'Chưa phân loại' &&
+                    sortedCategories.first.value == 0))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24.0),
                 child: Center(
                   child: Text(
-                    'Chưa có công việc nào được phân loại.',
-                    style: TextStyle(color: Colors.grey),
+                    'Chưa có công việc nào được phân loại trong khoảng thời gian này.',
+                    style: TextStyle(color: Colors.grey[600]),
+                    textAlign: TextAlign.center,
                   ),
                 ),
               )
             else
               ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
+                // Hiển thị danh sách category
+                shrinkWrap: true, // Chỉ chiếm chiều cao cần thiết
+                physics:
+                    const NeverScrollableScrollPhysics(), // Không cho cuộn riêng lẻ
                 itemCount: sortedCategories.length,
                 separatorBuilder:
-                    (_, __) => const Divider(
+                    (_, __) => Divider(
+                      // Đường kẻ phân cách
                       height: 16,
                       thickness: 0.5,
                       indent: 26,
                       endIndent: 10,
+                      color: Colors.grey[200], // Màu đường kẻ nhạt hơn
                     ),
                 itemBuilder: (context, index) {
                   final entry = sortedCategories[index];
                   final itemColor =
-                      categoryColors[index % categoryColors.length];
+                      categoryColors[index %
+                          categoryColors.length]; // Lấy màu xoay vòng
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4.0),
                     child: Row(
                       children: [
                         Container(
+                          // Chấm màu category
                           width: 10,
                           height: 10,
                           decoration: BoxDecoration(
@@ -930,6 +1012,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(width: 16),
                         Expanded(
+                          // Tên category
                           child: Text(
                             entry.key,
                             style: const TextStyle(fontSize: 13),
@@ -938,6 +1021,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(width: 10),
                         Text(
+                          // Số lượng task
                           entry.value.toString(),
                           style: const TextStyle(
                             fontWeight: FontWeight.w600,
@@ -955,6 +1039,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // Widget hiển thị trạng thái trống
   Widget _buildEmptyStateCard(
     ThemeData theme,
     String message, {
@@ -966,7 +1051,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       color: Colors.white,
       child: Container(
-        height: height,
+        height: height, // Chiều cao của card
         padding: const EdgeInsets.all(16.0),
         child: Center(
           child: Text(

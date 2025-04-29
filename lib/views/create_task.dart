@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -23,8 +24,9 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   final List<TextEditingController> _subtaskControllers = [];
   String? _selectedCategory;
   IconData? _selectedSticker;
-  final List<String> _attachmentNames = [];
+  final List<PlatformFile> _selectedFiles = [];
   bool _isSaving = false;
+
   final List<IconData> _stickerOptions = [
     Icons.star_border,
     Icons.favorite_border,
@@ -61,6 +63,18 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
       initialDate: _selectedDate ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2101),
+      locale: const Locale('vi', 'VN'),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: Theme.of(context).primaryColor,
+              onPrimary: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (p != null) {
       setState(() => _selectedDate = p);
@@ -71,6 +85,18 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
     final p = await showTimePicker(
       context: context,
       initialTime: _selectedTime ?? TimeOfDay.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: Theme.of(context).primaryColor,
+              onPrimary: Colors.white,
+            ),
+            timePickerTheme: TimePickerThemeData(),
+          ),
+          child: child!,
+        );
+      },
     );
     if (p != null) {
       setState(() => _selectedTime = p);
@@ -78,8 +104,8 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   }
 
   void _addSubtask() {
-    if (_subtaskTitleController.text.isNotEmpty) {
-      final t = _subtaskTitleController.text;
+    if (_subtaskTitleController.text.trim().isNotEmpty) {
+      final t = _subtaskTitleController.text.trim();
       setState(() {
         _subtasks.add(Subtask(title: t));
         _subtaskControllers.add(TextEditingController(text: t));
@@ -90,6 +116,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   }
 
   void _removeSubtask(int index) {
+    if (index < 0 || index >= _subtaskControllers.length) return;
     setState(() {
       _subtaskControllers[index].dispose();
       _subtaskControllers.removeAt(index);
@@ -103,32 +130,45 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
       builder:
           (ctx) => AlertDialog(
             title: const Text('Chọn Sticker'),
+            contentPadding: const EdgeInsets.all(16),
             content: SizedBox(
               width: double.maxFinite,
               child: GridView.builder(
                 shrinkWrap: true,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
+                  crossAxisCount: 5,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
                 ),
                 itemCount: _stickerOptions.length,
-                itemBuilder: (ctx, idx) {
+                itemBuilder: (ctxGrid, idx) {
                   final icon = _stickerOptions[idx];
+                  final bool isSelected = _selectedSticker == icon;
                   return InkWell(
                     onTap: () {
                       setState(() => _selectedSticker = icon);
                       Navigator.pop(ctx);
                     },
+                    borderRadius: BorderRadius.circular(8),
                     child: Container(
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
+                        border: Border.all(
+                          color:
+                              isSelected
+                                  ? Theme.of(ctxGrid).primaryColor
+                                  : Colors.grey.shade300,
+                          width: isSelected ? 1.5 : 1.0,
+                        ),
                         borderRadius: BorderRadius.circular(8),
+                        color:
+                            isSelected
+                                ? Theme.of(ctxGrid).primaryColor.withAlpha(26)
+                                : null,
                       ),
                       child: Icon(
                         icon,
-                        size: 30,
-                        color: Theme.of(ctx).primaryColor,
+                        size: 28,
+                        color: Theme.of(ctxGrid).primaryColor,
                       ),
                     ),
                   );
@@ -157,30 +197,55 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   }
 
   Future<void> _pickFiles() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Chức năng đính kèm chưa cài đặt.')),
-    );
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.any,
+      );
+
+      if (result != null) {
+        setState(() {
+          for (var file in result.files) {
+            if (!_selectedFiles.any(
+              (existingFile) => existingFile.path == file.path,
+            )) {
+              _selectedFiles.add(file);
+            }
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Lỗi chọn tệp: $e')));
+      }
+      debugPrint('Lỗi chọn tệp: $e');
+    }
   }
 
   void _removeAttachment(int index) {
-    setState(() => _attachmentNames.removeAt(index));
+    setState(() => _selectedFiles.removeAt(index));
   }
 
   Future<void> _saveTask() async {
     if (_formKey.currentState?.validate() ?? false) {
-      if (_isSaving) {
-        return;
-      }
-      setState(() {
-        _isSaving = true;
-      });
+      if (_isSaving) return;
+      setState(() => _isSaving = true);
+
       final taskViewModel = context.read<TaskViewModel>();
 
-      // --- Sửa LỖI 1 (Line 171): Thêm dấu ngoặc nhọn cho vòng lặp for ---
       for (int i = 0; i < _subtasks.length; i++) {
-        _subtasks[i].title = _subtaskControllers[i].text.trim();
+        if (i < _subtaskControllers.length) {
+          _subtasks[i].title = _subtaskControllers[i].text.trim();
+        }
       }
       _subtasks.removeWhere((st) => st.title.isEmpty);
+
+      final List<String> attachmentPaths = [
+        for (final file in _selectedFiles)
+          if (file.path != null) file.path!,
+      ];
 
       final newTask = Task(
         title: _titleController.text.trim(),
@@ -191,12 +256,11 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
         subtasks: _subtasks,
         category: _selectedCategory,
         sticker: _selectedSticker,
-        attachments:
-            _attachmentNames.isNotEmpty ? List.from(_attachmentNames) : null,
+        attachments: attachmentPaths,
       );
       try {
         await taskViewModel.addTask(newTask);
-        // --- Sửa LỖI 2 (Line 195): Thêm dấu ngoặc nhọn cho if ---
+
         if (mounted) {
           Navigator.pop(context);
           ScaffoldMessenger.of(
@@ -204,23 +268,19 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
           ).showSnackBar(SnackBar(content: Text('Đã thêm "${newTask.title}"')));
         }
       } catch (e) {
-        // --- Thêm dấu ngoặc nhọn cho nhất quán ---
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Lỗi: ${e.toString().replaceFirst('Exception: ', '')}',
+                'Lỗi khi thêm: ${e.toString().replaceFirst('Exception: ', '')}',
               ),
               backgroundColor: Colors.red,
             ),
           );
         }
       } finally {
-        // --- Thêm dấu ngoặc nhọn cho nhất quán ---
         if (mounted) {
-          setState(() {
-            _isSaving = false;
-          });
+          setState(() => _isSaving = false);
         }
       }
     }
@@ -230,12 +290,12 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   Widget build(BuildContext context) {
     final localizations = MaterialLocalizations.of(context);
     final availableCategories = context.watch<CategoryViewModel>().categories;
+    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF005AE0),
         leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.white),
+          icon: const Icon(Icons.close),
           onPressed: _isSaving ? null : () => Navigator.pop(context),
         ),
         title: const Text('Tạo Công Việc'),
@@ -252,7 +312,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                         color: Colors.white,
                       ),
                     )
-                    : const Icon(Icons.check, color: Colors.white),
+                    : const Icon(Icons.check),
             onPressed: _isSaving ? null : _saveTask,
             tooltip: 'Lưu công việc',
           ),
@@ -266,36 +326,43 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (_selectedSticker != null)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8.0),
-                      child: Icon(
-                        _selectedSticker,
-                        size: 30,
-                        color: Theme.of(context).primaryColor,
-                      ),
-                    )
-                  else
-                    const SizedBox.shrink(),
+                  IconButton(
+                    icon: Icon(
+                      _selectedSticker ?? Icons.sticky_note_2_outlined,
+                      size: 28,
+                      color:
+                          _selectedSticker != null
+                              ? theme.primaryColor
+                              : Colors.grey,
+                    ),
+                    tooltip: 'Chọn Sticker',
+                    onPressed: _showStickerDialog,
+                    splashRadius: 24,
+                    padding: const EdgeInsets.only(right: 10),
+                  ),
                   Expanded(
                     child: TextFormField(
                       controller: _titleController,
                       decoration: const InputDecoration(
                         labelText: 'Tiêu đề công việc...',
+                        labelStyle: TextStyle(fontSize: 18),
+                        hintText: 'Nhập tiêu đề công việc',
+                        border: UnderlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
                       ),
                       validator:
                           (v) =>
-                              (v == null || v.isEmpty)
+                              (v == null || v.trim().isEmpty)
                                   ? 'Vui lòng nhập tiêu đề'
                                   : null,
+                      textInputAction: TextInputAction.next,
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.sticky_note_2_outlined),
-                    tooltip: 'Chọn Sticker',
-                    onPressed: _showStickerDialog,
-                    splashRadius: 20,
                   ),
                 ],
               ),
@@ -303,15 +370,19 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
               TextFormField(
                 controller: _descriptionController,
                 decoration: const InputDecoration(
-                  labelText: 'Mô tả chi tiết công việc...',
+                  labelText: 'Mô tả',
+                  hintText: 'Thêm mô tả chi tiết công việc...',
                   alignLabelWithHint: true,
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.description_outlined),
                 ),
                 maxLines: 4,
+                textInputAction: TextInputAction.newline,
               ),
               const SizedBox(height: 24),
               const Text(
                 'Ưu tiên:',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(height: 8),
               Row(
@@ -344,8 +415,8 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                             ),
                             showCheckmark: false,
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
+                              horizontal: 12,
+                              vertical: 8,
                             ),
                             visualDensity: VisualDensity.compact,
                           ),
@@ -355,10 +426,11 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
               const SizedBox(height: 24),
               DropdownButtonFormField<String>(
                 value: _selectedCategory,
-                hint: const Text('Chọn phân loại'),
+                hint: const Text('Chưa phân loại'),
                 decoration: const InputDecoration(
                   labelText: 'Phân loại',
                   prefixIcon: Icon(Icons.label_outline),
+                  border: OutlineInputBorder(),
                 ),
                 items:
                     availableCategories
@@ -370,11 +442,14 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                         )
                         .toList(),
                 onChanged: (v) => setState(() => _selectedCategory = v),
+                validator: (v) {
+                  return null;
+                },
               ),
               const SizedBox(height: 24),
               const Text(
                 'Hạn chót:',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(height: 8),
               Row(
@@ -385,15 +460,20 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                       child: InputDecorator(
                         decoration: const InputDecoration(
                           labelText: 'Ngày',
-                          prefixIcon: Icon(Icons.calendar_today),
+                          prefixIcon: Icon(Icons.calendar_today, size: 20),
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 15,
+                          ),
                         ),
                         child: Text(
                           _selectedDate == null
-                              ? 'Chưa chọn ngày'
+                              ? 'Chọn ngày'
                               : DateFormat('dd/MM/yyyy').format(_selectedDate!),
                           style: TextStyle(
                             color:
-                                _selectedDate == null ? Colors.grey[600] : null,
+                                _selectedDate == null ? Colors.grey[700] : null,
                           ),
                         ),
                       ),
@@ -406,18 +486,23 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                       child: InputDecorator(
                         decoration: const InputDecoration(
                           labelText: 'Giờ',
-                          prefixIcon: Icon(Icons.access_time),
+                          prefixIcon: Icon(Icons.access_time, size: 20),
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 15,
+                          ),
                         ),
                         child: Text(
                           _selectedTime == null
-                              ? 'Chưa chọn giờ'
+                              ? 'Chọn giờ'
                               : localizations.formatTimeOfDay(
                                 _selectedTime!,
                                 alwaysUse24HourFormat: true,
                               ),
                           style: TextStyle(
                             color:
-                                _selectedTime == null ? Colors.grey[600] : null,
+                                _selectedTime == null ? Colors.grey[700] : null,
                           ),
                         ),
                       ),
@@ -428,7 +513,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
               const SizedBox(height: 24),
               const Text(
                 'Công việc con:',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(height: 8),
               ListView.builder(
@@ -436,6 +521,9 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _subtasks.length,
                 itemBuilder: (ctx, idx) {
+                  if (idx < 0 || idx >= _subtaskControllers.length) {
+                    return const SizedBox.shrink();
+                  }
                   final subtask = _subtasks[idx];
                   final controller = _subtaskControllers[idx];
                   return ListTile(
@@ -443,29 +531,47 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                     leading: Checkbox(
                       value: subtask.isDone,
                       onChanged:
-                          (v) => setState(() => subtask.isDone = v ?? false),
+                          (v) => setState(() {
+                            if (idx < _subtasks.length) {
+                              _subtasks[idx].isDone = v ?? false;
+                            }
+                          }),
                       visualDensity: VisualDensity.compact,
                       activeColor: Theme.of(context).primaryColor,
                     ),
                     title: TextField(
                       controller: controller,
-                      decoration: InputDecoration(
-                        hintText: 'Tiêu đề công việc con...',
+                      decoration: const InputDecoration(
+                        hintText: 'Công việc con...',
                         border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: UnderlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Theme.of(context).primaryColor,
-                          ),
-                        ),
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                        contentPadding: EdgeInsets.symmetric(vertical: 4),
                       ),
                       style: TextStyle(
                         decoration:
                             subtask.isDone ? TextDecoration.lineThrough : null,
                         color: subtask.isDone ? Colors.grey[600] : null,
                       ),
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) {
+                        if (controller.text.trim().isEmpty) {
+                          _removeSubtask(idx);
+                        } else if (idx < _subtasks.length) {
+                          _subtasks[idx].title = controller.text.trim();
+                        }
+                      },
+                      onTapOutside: (_) {
+                        FocusScope.of(context).unfocus();
+                        if (controller.text.trim().isEmpty) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted && idx < _subtasks.length) {
+                              _removeSubtask(idx);
+                            }
+                          });
+                        } else if (idx < _subtasks.length) {
+                          _subtasks[idx].title = controller.text.trim();
+                        }
+                      },
                     ),
                     trailing: IconButton(
                       icon: Icon(
@@ -481,25 +587,24 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
               ),
               Row(
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.only(right: 16.0),
-                    child: Icon(
-                      Icons.radio_button_unchecked,
-                      color: Colors.grey,
-                    ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12.0, right: 12.0),
+                    child: Icon(Icons.add, color: Colors.grey.shade400),
                   ),
                   Expanded(
                     child: TextField(
                       controller: _subtaskTitleController,
                       decoration: const InputDecoration(
                         hintText: 'Thêm công việc con mới...',
+                        border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.symmetric(
-                          horizontal: 12,
                           vertical: 10,
+                          horizontal: 0,
                         ),
                       ),
                       onSubmitted: (_) => _addSubtask(),
+                      textInputAction: TextInputAction.done,
                     ),
                   ),
                   IconButton(
@@ -515,34 +620,38 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
               const SizedBox(height: 24),
               const Text(
                 'Đính kèm:',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8.0,
-                runSpacing: 4.0,
-                children:
-                    _attachmentNames
-                        .asMap()
-                        .entries
-                        .map(
-                          (entry) => Chip(
-                            label: Text(
-                              entry.value,
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                            deleteIconColor: Colors.red[400],
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            onDeleted: () => _removeAttachment(entry.key),
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
+              if (_selectedFiles.isNotEmpty)
+                Wrap(
+                  spacing: 8.0,
+                  runSpacing: 4.0,
+                  children:
+                      _selectedFiles.asMap().entries.map((entry) {
+                        int idx = entry.key;
+                        PlatformFile file = entry.value;
+                        return Chip(
+                          label: Text(
+                            file.name,
+                            style: const TextStyle(fontSize: 12),
                           ),
-                        )
-                        .toList(),
-              ),
+                          avatar: Icon(
+                            Icons.insert_drive_file_outlined,
+                            size: 16,
+                            color: Colors.grey[700],
+                          ),
+                          deleteIconColor: Colors.red[400],
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          onDeleted: () => _removeAttachment(idx),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                        );
+                      }).toList(),
+                ),
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 icon: const Icon(Icons.attach_file, size: 18),
@@ -554,6 +663,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                     vertical: 8,
                   ),
                   textStyle: const TextStyle(fontSize: 13),
+                  side: BorderSide(color: Colors.grey.shade400),
                 ),
               ),
               const SizedBox(height: 20),
