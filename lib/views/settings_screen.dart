@@ -176,7 +176,9 @@ class SettingsScreen extends StatelessWidget {
             icon: Icons.notifications_outlined,
             title: 'Thông báo',
             onTap:
-                () => settingsViewModel.navigateToNotificationSettings(context),
+                () => settingsViewModel.navigateToNotificationSettings(
+                  context,
+                ), // Đảm bảo gọi đúng hàm này
           ),
           const Divider(),
           _buildSettingsItem(

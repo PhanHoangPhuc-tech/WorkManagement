@@ -5,12 +5,19 @@ import 'package:collection/collection.dart';
 import 'package:workmanagement/models/task_model.dart';
 import 'package:workmanagement/repositories/itask_repository.dart';
 import 'package:workmanagement/viewmodels/task_view_data.dart';
-import 'dart:io';
+import 'package:workmanagement/services/notification_service.dart'; // Import service
+import 'dart:io'; // Import lại nếu cần dùng File (cho StorageService giả lập)
 
+// Giữ lại StorageService giả lập nếu bạn vẫn muốn dùng logic file sau này
 class StorageService {
   Future<String> uploadFile(String filePath, String taskId) async {
     await Future.delayed(
-      Duration(milliseconds: 300 + File(filePath).lengthSync() % 500),
+      Duration(
+        milliseconds:
+            300 +
+            (File(filePath).existsSync() ? File(filePath).lengthSync() : 0) %
+                500,
+      ),
     );
     final fileName = filePath.split(Platform.pathSeparator).last;
     final identifier = 'storage/$taskId/$fileName';
@@ -27,7 +34,9 @@ class StorageService {
 class TaskViewModel with ChangeNotifier {
   final ITaskRepository _repository;
   final _uuid = const Uuid();
-  final StorageService _storageService = StorageService();
+  final StorageService _storageService =
+      StorageService(); // Giữ lại service file giả lập
+  final NotificationService _notificationService = NotificationService();
 
   List<Task> _tasks = [];
   bool _isLoading = false;
@@ -283,17 +292,26 @@ class TaskViewModel with ChangeNotifier {
       final List<String> localFilePaths = List.from(task.attachments);
       taskToSave = task.copyWith(attachments: []);
       final taskId = taskToSave.id.isEmpty ? _uuid.v4() : taskToSave.id;
+      taskToSave = taskToSave.copyWith(id: taskId);
 
       if (localFilePaths.isNotEmpty) {
         debugPrint(
           "Bắt đầu upload ${localFilePaths.length} tệp cho task $taskId...",
         );
         for (String path in localFilePaths) {
-          try {
-            final identifier = await _uploadFileAndGetIdentifier(path, taskId);
-            uploadedAttachmentIdentifiers.add(identifier);
-          } catch (e) {
-            debugPrint("Lỗi upload file $path: $e. Bỏ qua file này.");
+          if (File(path).existsSync()) {
+            // Chỉ upload nếu file tồn tại
+            try {
+              final identifier = await _uploadFileAndGetIdentifier(
+                path,
+                taskId,
+              );
+              uploadedAttachmentIdentifiers.add(identifier);
+            } catch (e) {
+              debugPrint("Lỗi upload file $path: $e. Bỏ qua file này.");
+            }
+          } else {
+            debugPrint("File không tồn tại để upload: $path");
           }
         }
         debugPrint(
@@ -308,12 +326,22 @@ class TaskViewModel with ChangeNotifier {
       final addedTask = await _repository.addTask(taskToSave);
       _tasks.insert(0, addedTask);
 
+      await _notificationService.scheduleTaskReminders(addedTask);
+
       debugPrint(
         "Thêm thành công task: ${taskToSave.title} với ${uploadedAttachmentIdentifiers.length} đính kèm.",
       );
     } catch (e, s) {
       _setError(e, s);
-      debugPrint("Lỗi lưu task, cần xem xét xóa file đã upload nếu có.");
+      debugPrint("Lỗi lưu task. Cần xem xét xóa các file đã upload nếu có.");
+      if (uploadedAttachmentIdentifiers.isNotEmpty) {
+        debugPrint("Rollback: Xóa các file đã upload do lỗi lưu task...");
+        for (var identifier in uploadedAttachmentIdentifiers) {
+          try {
+            await _deleteFile(identifier);
+          } catch (_) {}
+        }
+      }
     } finally {
       _setLoading(false);
     }
@@ -336,6 +364,8 @@ class TaskViewModel with ChangeNotifier {
     }
     originalTask = _tasks[index];
 
+    await _notificationService.cancelNotificationsForTask(originalTask.id);
+
     final List<String> existingIdentifiers = List.from(
       originalTask.attachments,
     );
@@ -345,8 +375,8 @@ class TaskViewModel with ChangeNotifier {
             .where(
               (path) =>
                   !existingIdentifiers.contains(path) &&
-                  File(path).existsSync(),
-            )
+                  path.contains(Platform.pathSeparator),
+            ) // Check kỹ hơn
             .toList();
     final List<String> identifiersToKeep =
         finalIdentifiersFromView
@@ -369,11 +399,18 @@ class TaskViewModel with ChangeNotifier {
           "Bắt đầu upload ${newLocalFilePaths.length} tệp mới cho task ${task.id}...",
         );
         for (String path in newLocalFilePaths) {
-          try {
-            final identifier = await _uploadFileAndGetIdentifier(path, task.id);
-            uploadedNewIdentifiers.add(identifier);
-          } catch (e) {
-            debugPrint("Lỗi upload file mới $path: $e. Bỏ qua file này.");
+          if (File(path).existsSync()) {
+            try {
+              final identifier = await _uploadFileAndGetIdentifier(
+                path,
+                task.id,
+              );
+              uploadedNewIdentifiers.add(identifier);
+            } catch (e) {
+              debugPrint("Lỗi upload file mới $path: $e. Bỏ qua file này.");
+            }
+          } else {
+            debugPrint("File mới không tồn tại để upload: $path");
           }
         }
         debugPrint("Đã upload xong ${uploadedNewIdentifiers.length} tệp mới.");
@@ -402,17 +439,33 @@ class TaskViewModel with ChangeNotifier {
       await _repository.updateTask(taskToSave);
 
       _tasks[index] = taskToSave;
+      await _notificationService.scheduleTaskReminders(taskToSave);
       notifyListeners();
       debugPrint(
         "Cập nhật thành công task: ${taskToSave.title} với ${finalAttachmentsForDB.length} đính kèm.",
       );
     } catch (e, s) {
-      _tasks[index] = originalTask;
+      _tasks[index] = originalTask; // Rollback task state
+      await _notificationService.scheduleTaskReminders(
+        originalTask,
+      ); // Lên lịch lại thông báo cũ
       _setError("Lỗi cập nhật công việc: $e", s);
       notifyListeners();
       debugPrint(
         "Lỗi update task, cần xem xét rollback file upload/delete nếu có.",
       );
+      // Rollback file upload nếu có lỗi sau khi upload thành công
+      if (uploadedNewIdentifiers.isNotEmpty) {
+        debugPrint(
+          "Rollback: Xóa các file MỚI đã upload do lỗi update task...",
+        );
+        for (var id in uploadedNewIdentifiers) {
+          try {
+            await _deleteFile(id);
+          } catch (_) {}
+        }
+      }
+      // Không thể rollback file đã xóa (identifiersToDelete) một cách đơn giản
     }
   }
 
@@ -429,6 +482,8 @@ class TaskViewModel with ChangeNotifier {
 
     final taskToDelete = _tasks[index];
     List<String> attachmentsToDelete = List.from(taskToDelete.attachments);
+
+    await _notificationService.cancelNotificationsForTask(taskId);
 
     _tasks.removeAt(index);
     notifyListeners();
@@ -454,7 +509,10 @@ class TaskViewModel with ChangeNotifier {
         debugPrint("Đã xử lý xong việc xóa file đính kèm.");
       }
     } catch (e, s) {
-      _tasks.insert(index, taskToDelete);
+      _tasks.insert(index, taskToDelete); // Rollback
+      await _notificationService.scheduleTaskReminders(
+        taskToDelete,
+      ); // Lên lịch lại noti
       _setError("Lỗi xóa công việc: $e", s);
       notifyListeners();
     }
@@ -471,9 +529,19 @@ class TaskViewModel with ChangeNotifier {
 
       try {
         await _repository.updateTask(updatedTask);
+        if (updatedTask.isDone) {
+          await _notificationService.cancelNotificationsForTask(taskId);
+        } else {
+          await _notificationService.scheduleTaskReminders(updatedTask);
+        }
         debugPrint("Toggle thành công task: ${updatedTask.title}");
       } catch (e, s) {
         _tasks[index] = originalTask;
+        if (originalTask.isDone) {
+          await _notificationService.cancelNotificationsForTask(taskId);
+        } else {
+          await _notificationService.scheduleTaskReminders(originalTask);
+        }
         _setError("Lỗi cập nhật trạng thái: $e", s);
         notifyListeners();
       }

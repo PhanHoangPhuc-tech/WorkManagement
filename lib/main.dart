@@ -13,11 +13,28 @@ import 'package:workmanagement/viewmodels/settings_viewmodel.dart';
 import 'package:workmanagement/views/splash_screen.dart';
 import 'firebase_options.dart';
 import 'config/app_theme.dart';
+import 'package:workmanagement/services/notification_service.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
-void main() async {
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('vi_VN', null);
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  tz.initializeTimeZones();
+  try {
+    tz.setLocalLocation(tz.getLocation('Asia/Ho_Chi_Minh'));
+  } catch (e) {
+    debugPrint(
+      "Không thể tìm thấy múi giờ 'Asia/Ho_Chi_Minh', dùng UTC. Lỗi: $e",
+    );
+    tz.setLocalLocation(tz.getLocation('UTC'));
+  }
+
+  await NotificationService().init();
 
   runApp(
     MultiProvider(
@@ -54,7 +71,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final settingsViewModel = context.watch<SettingsViewModel>();
 
-    if (settingsViewModel.isLoadingTheme) {
+    if (settingsViewModel.isLoadingPrefs) {
       return const MaterialApp(
         home: Scaffold(body: Center(child: CircularProgressIndicator())),
         debugShowCheckedModeBanner: false,
@@ -62,6 +79,7 @@ class MyApp extends StatelessWidget {
     }
 
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'TaskFlow',
       themeMode: settingsViewModel.themeMode,
       theme: AppTheme.lightTheme,

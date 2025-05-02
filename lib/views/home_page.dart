@@ -10,6 +10,9 @@ import 'package:workmanagement/views/manage_categories_screen.dart';
 import 'package:workmanagement/views/calendar_screen.dart';
 import 'package:workmanagement/views/profile_screen.dart';
 import 'package:workmanagement/views/settings_screen.dart';
+import 'package:workmanagement/views/widgets/task_search_delegate.dart';
+import 'package:workmanagement/services/notification_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class HomePage extends StatefulWidget {
   final String userId;
@@ -22,7 +25,83 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
-  final _TaskSearchDelegate _searchDelegate = _TaskSearchDelegate();
+  final TaskSearchDelegate _searchDelegate = TaskSearchDelegate();
+  final NotificationService _notificationService = NotificationService();
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(Duration.zero, _requestNotificationPermissions);
+  }
+
+  Future<void> _requestNotificationPermissions() async {
+    bool granted = await _notificationService.requestPermissions();
+    if (!granted) {
+      debugPrint("Quyền thông báo không được cấp khi khởi tạo HomePage.");
+      PermissionStatus status = await Permission.notification.status;
+      if (status.isPermanentlyDenied && mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder:
+              (context) => AlertDialog(
+                title: const Text("Yêu cầu quyền thông báo"),
+                content: const Text(
+                  "Ứng dụng cần quyền thông báo để gửi nhắc nhở công việc. Vui lòng cấp quyền trong cài đặt ứng dụng.",
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text("Để sau"),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      openAppSettings();
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text("Mở cài đặt"),
+                  ),
+                ],
+              ),
+        );
+      }
+    } else {
+      debugPrint(
+        "Quyền thông báo đã được cấp (hoặc cấp trước đó) khi khởi tạo HomePage.",
+      );
+    }
+
+    PermissionStatus exactAlarmStatus =
+        await Permission.scheduleExactAlarm.status;
+    if (!exactAlarmStatus.isGranted && mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder:
+            (context) => AlertDialog(
+              title: const Text("Yêu cầu quyền lên lịch chính xác"),
+              content: const Text(
+                "Ứng dụng cần quyền 'Báo thức và lời nhắc' để đảm bảo nhắc nhở đúng giờ. Vui lòng bật quyền này trong cài đặt.",
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text("Để sau"),
+                ),
+                TextButton(
+                  onPressed: () {
+                    openAppSettings();
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text("Mở cài đặt"),
+                ),
+              ],
+            ),
+      );
+    } else if (exactAlarmStatus.isGranted) {
+      debugPrint("Quyền ScheduleExactAlarm đã được cấp.");
+    }
+  }
 
   void _confirmDeleteTask(BuildContext context, Task task) {
     final taskViewModel = context.read<TaskViewModel>();
@@ -136,6 +215,9 @@ class _HomePageState extends State<HomePage> {
       backgroundColor:
           theme.bottomSheetTheme.modalBackgroundColor ??
           (isDarkMode ? const Color(0xFF2A2A2A) : Colors.white),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder:
           (_) => Padding(
             padding: const EdgeInsets.all(16.0),
@@ -143,13 +225,15 @@ class _HomePageState extends State<HomePage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Tùy chọn lọc & Quản lý',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Text(
+                    'Tùy chọn lọc & Quản lý',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 10),
                 Consumer<TaskViewModel>(
                   builder: (context, vm, child) {
                     return SwitchListTile(
@@ -157,13 +241,14 @@ class _HomePageState extends State<HomePage> {
                       value: vm.showCompleted,
                       contentPadding: EdgeInsets.zero,
                       onChanged: (value) {
+                        Navigator.pop(context);
                         taskViewModel.toggleShowCompleted(value);
                       },
                       activeColor: theme.primaryColor,
                     );
                   },
                 ),
-                Divider(color: theme.dividerColor),
+                Divider(color: theme.dividerColor.withAlpha(128)),
                 ListTile(
                   leading: Icon(
                     Icons.category_outlined,
@@ -178,6 +263,7 @@ class _HomePageState extends State<HomePage> {
                   },
                   trailing: Icon(Icons.chevron_right, color: Colors.grey[600]),
                 ),
+                const SizedBox(height: 8),
               ],
             ),
           ),
@@ -186,21 +272,8 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final taskViewModel = context.watch<TaskViewModel>();
-    final categoryViewModel = context.watch<CategoryViewModel>();
-
-    final categories = categoryViewModel.categories;
-    final currentFilter = taskViewModel.selectedCategoryFilter;
-    final filterOptions = ['Tất cả', ...categories.where((c) => c != 'Tất cả')];
-
     final List<Widget> screens = [
-      _buildTaskListPage(
-        context,
-        taskViewModel,
-        categoryViewModel,
-        filterOptions,
-        currentFilter,
-      ),
+      _buildTaskListPage(context),
       const CalendarScreen(),
       const ProfileScreen(),
       const SettingsScreen(),
@@ -208,7 +281,13 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('TaskFlow'),
+        title: const Text(
+          'TaskFlow',
+          style: TextStyle(
+            fontSize: 24, // <<--- Tăng kích thước chữ ở đây
+            fontWeight: FontWeight.bold, // Optional: Làm đậm chữ nếu muốn
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
@@ -256,9 +335,9 @@ class _HomePageState extends State<HomePage> {
             label: 'Lịch',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
-            label: 'Của tôi',
+            icon: Icon(Icons.bar_chart_outlined),
+            activeIcon: Icon(Icons.bar_chart),
+            label: 'Tổng quan',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.settings_outlined),
@@ -266,20 +345,19 @@ class _HomePageState extends State<HomePage> {
             label: 'Cài đặt',
           ),
         ],
+        type: BottomNavigationBarType.fixed,
       ),
     );
   }
 
-  Widget _buildTaskListPage(
-    BuildContext context,
-    TaskViewModel taskVM,
-    CategoryViewModel catVM,
-    List<String> filters,
-    String? currentFilterValue,
-  ) {
-    Widget bodyContent;
+  Widget _buildTaskListPage(BuildContext context) {
+    final taskVM = context.watch<TaskViewModel>();
+    final catVM = context.watch<CategoryViewModel>();
     final theme = Theme.of(context);
     final bool isDarkMode = theme.brightness == Brightness.dark;
+
+    final categories = catVM.categories;
+    final filterOptions = ['Tất cả', ...categories.where((c) => c != 'Tất cả')];
 
     final groupedTasksMap = taskVM.groupedTasks;
     final visibleSectionKeys = groupedTasksMap.keys.toList();
@@ -297,13 +375,30 @@ class _HomePageState extends State<HomePage> {
             ? theme.textTheme.bodyMedium?.color?.withAlpha(153)
             : Colors.grey[700];
     final Color filterBarBorderColor =
-        isDarkMode ? theme.dividerColor : Colors.grey.shade300;
+        isDarkMode ? theme.dividerColor.withAlpha(51) : Colors.grey.shade300;
     final Color filterBarBackgroundColor =
         isDarkMode ? theme.colorScheme.surface : Colors.white;
     final Color expansionTileBorderColor =
-        isDarkMode ? theme.dividerColor : Colors.grey.shade300;
+        isDarkMode ? theme.dividerColor.withAlpha(51) : Colors.grey.shade300;
     final Color? filterIconColor =
         isDarkMode ? theme.iconTheme.color?.withAlpha(179) : Colors.grey[700];
+    final Color chipSelectedBgColor = theme.primaryColor.withAlpha(
+      isDarkMode ? 70 : 30,
+    );
+    final Color chipUnselectedBgColor =
+        isDarkMode ? Colors.grey[800]! : Colors.grey[200]!;
+    final Color chipSelectedTextColor = theme.primaryColor;
+    final Color? chipUnselectedTextColor = theme.textTheme.bodySmall?.color;
+    final BorderSide chipUnselectedBorder = BorderSide(
+      color: filterBarBorderColor,
+      width: 0.5,
+    );
+    final BorderSide chipSelectedBorder = BorderSide(
+      color: theme.primaryColor.withAlpha(150),
+      width: 1,
+    );
+
+    Widget bodyContent;
 
     if (error != null && !isLoading) {
       bodyContent = Center(
@@ -332,9 +427,7 @@ class _HomePageState extends State<HomePage> {
                 onPressed:
                     isLoading
                         ? null
-                        : () {
-                          context.read<TaskViewModel>().loadTasks();
-                        },
+                        : () => context.read<TaskViewModel>().loadTasks(),
               ),
             ],
           ),
@@ -360,7 +453,10 @@ class _HomePageState extends State<HomePage> {
     } else {
       bodyContent = RefreshIndicator(
         onRefresh: () async {
-          await context.read<TaskViewModel>().loadTasks();
+          await Future.wait([
+            context.read<TaskViewModel>().loadTasks(),
+            context.read<CategoryViewModel>().loadCategories(),
+          ]);
         },
         child: ListView.builder(
           key: const PageStorageKey('taskList'),
@@ -394,18 +490,15 @@ class _HomePageState extends State<HomePage> {
                 vertical: 4.0,
               ),
               childrenPadding: const EdgeInsets.only(
-                left: 16.0,
-                right: 16.0,
+                left: 0,
+                right: 0,
                 bottom: 8.0,
               ),
               backgroundColor:
                   isDarkMode
-                      ? theme.expansionTileTheme.backgroundColor
+                      ? theme.cardColor.withAlpha(10)
                       : Colors.grey.shade50,
-              collapsedBackgroundColor:
-                  isDarkMode
-                      ? theme.expansionTileTheme.collapsedBackgroundColor
-                      : Colors.transparent,
+              collapsedBackgroundColor: Colors.transparent,
               children:
                   tasksInSection
                       .map((taskData) => _buildTaskItem(context, taskData))
@@ -420,10 +513,12 @@ class _HomePageState extends State<HomePage> {
       children: [
         Container(
           height: 50,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: filterBarBackgroundColor,
-            border: Border(bottom: BorderSide(color: filterBarBorderColor)),
+            border: Border(
+              bottom: BorderSide(color: filterBarBorderColor, width: 0.5),
+            ),
           ),
           child: Row(
             children: [
@@ -442,18 +537,45 @@ class _HomePageState extends State<HomePage> {
                         )
                         : ListView.separated(
                           scrollDirection: Axis.horizontal,
-                          itemCount: filters.length,
+                          itemCount: filterOptions.length,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
                           separatorBuilder: (_, __) => const SizedBox(width: 8),
                           itemBuilder: (context, idx) {
-                            final filterName = filters[idx];
+                            final filterName = filterOptions[idx];
                             final filterValue =
                                 filterName == 'Tất cả' ? null : filterName;
+                            final isSelected =
+                                taskVM.selectedCategoryFilter == filterValue;
                             return ChoiceChip(
                               label: Text(filterName),
-                              selected:
-                                  taskVM.selectedCategoryFilter == filterValue,
+                              selected: isSelected,
                               onSelected:
                                   (_) => taskVM.setCategoryFilter(filterValue),
+                              selectedColor: chipSelectedBgColor,
+                              backgroundColor: chipUnselectedBgColor,
+                              labelStyle: TextStyle(
+                                fontSize: 13,
+                                color:
+                                    isSelected
+                                        ? chipSelectedTextColor
+                                        : chipUnselectedTextColor,
+                                fontWeight:
+                                    isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                              ),
+                              side:
+                                  isSelected
+                                      ? chipSelectedBorder
+                                      : chipUnselectedBorder,
+                              showCheckmark: false,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
                             );
                           },
                         ),
@@ -464,6 +586,7 @@ class _HomePageState extends State<HomePage> {
                 onPressed: _onFilterIconPressed,
                 color: filterIconColor,
                 splashRadius: 20,
+                visualDensity: VisualDensity.compact,
               ),
             ],
           ),
@@ -498,22 +621,29 @@ class _HomePageState extends State<HomePage> {
             : Colors.grey[600];
     // ignore: unnecessary_nullable_for_final_variable_declarations
     final Color? overdueColor =
-        isDarkMode ? theme.colorScheme.error : Colors.red.shade700;
+        isDarkMode
+            ? theme.colorScheme.error.withAlpha(220)
+            : Colors.red.shade700;
     final Color? timeColor =
-        isOverdue
+        isOverdue && !isDone
             ? overdueColor
             : (isDarkMode
                 ? theme.textTheme.bodySmall?.color?.withAlpha(204)
                 : Colors.grey[700]);
     final Color? popupIconColor =
-        isDarkMode ? theme.iconTheme.color?.withAlpha(153) : Colors.grey;
+        isDarkMode ? theme.iconTheme.color?.withAlpha(153) : Colors.grey[600];
     final Color itemDividerColor =
-        isDarkMode ? theme.dividerColor.withAlpha(128) : Colors.grey.shade200;
+        isDarkMode ? theme.dividerColor.withAlpha(51) : Colors.grey.shade200;
 
     return InkWell(
       onTap: () => _navigateToEditTask(context, taskData.originalTask),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 0),
+        padding: const EdgeInsets.only(
+          left: 16.0,
+          right: 4.0,
+          top: 12.0,
+          bottom: 12.0,
+        ),
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(color: itemDividerColor, width: 0.5),
@@ -522,18 +652,32 @@ class _HomePageState extends State<HomePage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: Checkbox(
-                  value: isDone,
-                  onChanged: (v) {
-                    if (v != null) taskViewModel.toggleTaskDone(taskData.id);
-                  },
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            GestureDetector(
+              onTap: () => taskViewModel.toggleTaskDone(taskData.id),
+              child: Padding(
+                padding: const EdgeInsets.only(
+                  right: 12.0,
+                  left: 0,
+                  top: 4,
+                  bottom: 4,
+                ),
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: Checkbox(
+                    value: isDone,
+                    onChanged: (v) {
+                      if (v != null) taskViewModel.toggleTaskDone(taskData.id);
+                    },
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    activeColor: theme.primaryColor,
+                    checkColor: theme.colorScheme.onPrimary,
+                    side: BorderSide(
+                      color: isDarkMode ? Colors.grey[700]! : Colors.grey[400]!,
+                      width: 1.5,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -544,7 +688,14 @@ class _HomePageState extends State<HomePage> {
                   Row(
                     children: [
                       if (sticker != null)
-                        Icon(sticker, size: 18, color: theme.primaryColor),
+                        Icon(
+                          sticker,
+                          size: 18,
+                          color:
+                              isDone
+                                  ? titleColor?.withAlpha(150)
+                                  : theme.primaryColor.withAlpha(220),
+                        ),
                       if (sticker != null) const SizedBox(width: 6),
                       Expanded(
                         child: Text(
@@ -552,7 +703,7 @@ class _HomePageState extends State<HomePage> {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 15,
+                            fontSize: 15.5,
                             decoration:
                                 isDone ? TextDecoration.lineThrough : null,
                             fontWeight: FontWeight.w500,
@@ -587,16 +738,25 @@ class _HomePageState extends State<HomePage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Icon(Icons.flag, color: priorityColor, size: 18),
+                    Icon(
+                      Icons.flag_outlined,
+                      color:
+                          isDone ? priorityColor.withAlpha(100) : priorityColor,
+                      size: 18,
+                    ),
                     if (trailingInfo.isNotEmpty) const SizedBox(height: 4),
                     if (trailingInfo.isNotEmpty)
                       Text(
                         trailingInfo,
                         style: TextStyle(
-                          color: timeColor,
+                          color: isDone ? timeColor?.withAlpha(100) : timeColor,
                           fontSize: 12,
                           fontWeight:
-                              isOverdue ? FontWeight.bold : FontWeight.normal,
+                              isOverdue && !isDone
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                          decoration:
+                              isDone ? TextDecoration.lineThrough : null,
                         ),
                       ),
                   ],
@@ -607,13 +767,6 @@ class _HomePageState extends State<HomePage> {
                   iconSize: 20,
                   padding: const EdgeInsets.all(0),
                   splashRadius: 18,
-                  onSelected: (String result) {
-                    if (result == 'edit') {
-                      _navigateToEditTask(context, taskData.originalTask);
-                    } else if (result == 'delete') {
-                      _confirmDeleteTask(context, taskData.originalTask);
-                    }
-                  },
                   itemBuilder:
                       (BuildContext context) => <PopupMenuEntry<String>>[
                         PopupMenuItem<String>(
@@ -626,12 +779,12 @@ class _HomePageState extends State<HomePage> {
                                 size: 20,
                                 color: theme.iconTheme.color,
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 12),
                               const Text('Sửa'),
                             ],
                           ),
                         ),
-                        const PopupMenuDivider(),
+                        const PopupMenuDivider(height: 1),
                         PopupMenuItem<String>(
                           value: 'delete',
                           height: 40,
@@ -642,7 +795,7 @@ class _HomePageState extends State<HomePage> {
                                 size: 20,
                                 color: theme.colorScheme.error,
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 12),
                               Text(
                                 'Xóa',
                                 style: TextStyle(
@@ -653,184 +806,22 @@ class _HomePageState extends State<HomePage> {
                           ),
                         ),
                       ],
+                  onSelected: (String result) {
+                    if (result == 'edit') {
+                      _navigateToEditTask(context, taskData.originalTask);
+                    } else if (result == 'delete') {
+                      _confirmDeleteTask(context, taskData.originalTask);
+                    }
+                  },
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
                 ),
               ],
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _TaskSearchDelegate extends SearchDelegate<Task?> {
-  @override
-  String? get searchFieldLabel => 'Tìm công việc...';
-
-  @override
-  ThemeData appBarTheme(BuildContext context) {
-    final theme = Theme.of(context);
-    return theme.copyWith(
-      appBarTheme: theme.appBarTheme,
-      inputDecorationTheme: InputDecorationTheme(
-        hintStyle: TextStyle(color: theme.hintColor.withAlpha(153)),
-        border: InputBorder.none,
-      ),
-      textSelectionTheme: TextSelectionThemeData(
-        cursorColor: theme.primaryColor,
-        // ignore: deprecated_member_use
-        selectionColor: theme.primaryColor.withOpacity(0.3),
-        selectionHandleColor: theme.primaryColor,
-      ),
-    );
-  }
-
-  @override
-  List<Widget>? buildActions(BuildContext context) {
-    final theme = Theme.of(context);
-    return [
-      if (query.isNotEmpty)
-        IconButton(
-          icon: Icon(Icons.clear, color: theme.iconTheme.color?.withAlpha(179)),
-          tooltip: 'Xóa tìm kiếm',
-          onPressed: () {
-            query = '';
-            showSuggestions(context);
-          },
-        ),
-    ];
-  }
-
-  @override
-  Widget? buildLeading(BuildContext context) {
-    final theme = Theme.of(context);
-    return IconButton(
-      icon: Icon(Icons.arrow_back, color: theme.appBarTheme.iconTheme?.color),
-      tooltip: 'Quay lại',
-      onPressed: () => close(context, null),
-    );
-  }
-
-  @override
-  Widget buildResults(BuildContext context) {
-    final theme = Theme.of(context);
-    final bool isDarkMode = theme.brightness == Brightness.dark;
-    final taskViewModel = context.read<TaskViewModel>();
-    final List<TaskViewData> results = taskViewModel.searchTasks(query);
-
-    if (results.isEmpty) {
-      return Center(
-        child: Text(
-          'Không tìm thấy kết quả nào cho "$query".',
-          style: TextStyle(color: theme.hintColor),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: results.length,
-      itemBuilder: (context, index) {
-        final taskData = results[index];
-        final Color? tileColor =
-            taskData.isDone
-                ? (isDarkMode
-                    ? theme.disabledColor.withAlpha(26)
-                    : Colors.grey.shade100)
-                : null;
-
-        return ListTile(
-          leading: Icon(
-            taskData.isDone ? Icons.check_box : Icons.check_box_outline_blank,
-            color: taskData.isDone ? theme.disabledColor : theme.primaryColor,
-          ),
-          title: Row(
-            children: [
-              if (taskData.sticker != null)
-                Icon(taskData.sticker, size: 18, color: theme.primaryColor),
-              if (taskData.sticker != null) const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  taskData.title,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    decoration:
-                        taskData.isDone ? TextDecoration.lineThrough : null,
-                    color: taskData.isDone ? theme.disabledColor : null,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          subtitle: Text(
-            taskData.displaySubtitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 13, color: theme.hintColor),
-          ),
-          trailing: Icon(Icons.flag, color: taskData.priorityColor, size: 18),
-          onTap: () => close(context, taskData.originalTask),
-          tileColor: tileColor,
-        );
-      },
-    );
-  }
-
-  @override
-  Widget buildSuggestions(BuildContext context) {
-    final theme = Theme.of(context);
-    final bool isDarkMode = theme.brightness == Brightness.dark;
-    final taskViewModel = context.read<TaskViewModel>();
-
-    if (query.trim().isEmpty) {
-      return Center(
-        child: Text(
-          'Nhập từ khóa để tìm kiếm...',
-          style: TextStyle(color: theme.hintColor),
-        ),
-      );
-    }
-
-    final List<TaskViewData> suggestions =
-        taskViewModel.searchTasks(query).take(10).toList();
-
-    if (suggestions.isEmpty) {
-      return Center(
-        child: Text(
-          'Không có gợi ý nào cho "$query".',
-          style: TextStyle(color: theme.hintColor),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: suggestions.length,
-      itemBuilder: (context, index) {
-        final taskData = suggestions[index];
-        return ListTile(
-          leading: Icon(
-            taskData.sticker ?? Icons.label_outline,
-            color:
-                isDarkMode
-                    ? theme.iconTheme.color?.withAlpha(179)
-                    : Colors.grey[600],
-          ),
-          title: Text(taskData.title),
-          subtitle: Text(
-            taskData.categoryDisplay.isNotEmpty
-                ? taskData.categoryDisplay
-                    .replaceAll('[', '')
-                    .replaceAll(']', '')
-                : (taskData.originalTask.description.length > 30
-                    ? '${taskData.originalTask.description.substring(0, 30)}...'
-                    : taskData.originalTask.description),
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: theme.hintColor),
-          ),
-          onTap: () {
-            close(context, taskData.originalTask);
-          },
-        );
-      },
     );
   }
 }
