@@ -16,25 +16,25 @@ class NotificationSettingsScreen extends StatelessWidget {
         children: [
           ListTile(
             title: const Text('Loại lời nhắc mặc định'),
-            subtitle: const Text('Thông báo'), // Giá trị ví dụ
+            subtitle: const Text('Thông báo'),
             trailing: const Icon(Icons.chevron_right),
             onTap:
                 () => viewModel.navigateToDefaultAlertType(
                   context,
-                ), // Gọi hàm placeholder
+                ),
           ),
           const Divider(height: 1),
           ListTile(
             title: const Text('Nhạc chuông mặc định'),
-            subtitle: const Text('TaskFlow mặc định'), // Giá trị ví dụ
+            subtitle: const Text('TaskFlow mặc định'),
             trailing: const Icon(Icons.chevron_right),
             onTap:
                 () => viewModel.navigateToDefaultRingtone(
                   context,
-                ), // Gọi hàm placeholder
+                ),
           ),
           const Divider(height: 1),
-          const SizedBox(height: 10), // Khoảng cách nhỏ
+          const SizedBox(height: 10),
 
           SwitchListTile(
             title: const Text('Gửi thông báo trước hạn'),
